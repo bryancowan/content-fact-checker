@@ -1,0 +1,6 @@
+cerebras_cloud_sdk
+parallel-web
+python-dotenv
+requests
+beautifulsoup4
+streamlit
