@@ -12,6 +12,24 @@ Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cook
 2. **Search for evidence** — Each claim is searched against the web using Parallel Search
 3. **Judge each claim** — The LLM evaluates evidence and returns a verdict: True, False, or Uncertain, with reasoning and source URLs
 
+### Screenshots
+
+**Check Text tab** — paste any text to fact-check:
+
+![Check Text](assets/web-check-text.png)
+
+**Check URL tab** — enter a URL to analyze:
+
+![Check URL](assets/web-check-url.png)
+
+**Progress** — each claim is checked in real time:
+
+![Checking in progress](assets/web-check-url-progress.png)
+
+**Results** — verdicts with reasoning and source links:
+
+![Results](assets/web-check-url-results.png)
+
 ## Setup
 
 ### Prerequisites
