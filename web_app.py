@@ -11,6 +11,31 @@ from fact_checker import fact_check_text, fact_check_url, ClaimResult
 
 st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
 
+
+def _check_password() -> bool:
+    """Gate the app behind a shared password stored in st.secrets."""
+    try:
+        correct_pw = st.secrets["APP_PASSWORD"]
+    except (KeyError, FileNotFoundError):
+        return True  # No password configured — allow access (local dev)
+
+    if st.session_state.get("authenticated"):
+        return True
+
+    st.title("Content Fact-Checker")
+    pw = st.text_input("Enter the access password:", type="password")
+    if st.button("Submit", type="primary"):
+        if pw == correct_pw:
+            st.session_state["authenticated"] = True
+            st.rerun()
+        else:
+            st.error("Incorrect password. Please try again.")
+    return False
+
+
+if not _check_password():
+    st.stop()
+
 st.title("Content Fact-Checker")
 st.markdown(
     "Extract claims from text or URLs, retrieve real-world evidence, "
