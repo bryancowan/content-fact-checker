@@ -70,6 +70,13 @@ with tab_url:
     url_submit = st.button("Fact-Check URL", type="primary", key="url_btn")
 
 
+_GREEN_BAR_HTML = (
+    '<div style="width:100%;background:#333;border-radius:4px;overflow:hidden">'
+    '<div style="width:100%;height:8px;background:#28a745;border-radius:4px"></div>'
+    "</div>"
+)
+
+
 def display_results(results: list[ClaimResult]):
     st.markdown("---")
     st.subheader(f"Results: {len(results)} claims checked")
@@ -104,6 +111,7 @@ if text_submit and text_input.strip():
             progress_text.text(message)
 
         results = fact_check_text(text_input, on_progress=on_text_progress)
+        progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
         status.update(label="Fact-check complete!", state="complete")
 
     if results:
@@ -130,6 +138,7 @@ if url_submit and url_input.strip():
             progress_text.text(message)
 
         results = fact_check_url(url_input, on_progress=on_url_progress)
+        progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
         status.update(label="Fact-check complete!", state="complete")
 
     if results:
