@@ -2,6 +2,7 @@
 
 import sys
 import os
+from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
@@ -35,6 +36,9 @@ def _check_password() -> bool:
 
 if not _check_password():
     st.stop()
+
+if "history" not in st.session_state:
+    st.session_state["history"] = []
 
 st.title("Content Fact-Checker")
 st.markdown(
@@ -103,6 +107,12 @@ if text_submit and text_input.strip():
         status.update(label="Fact-check complete!", state="complete")
 
     if results:
+        st.session_state["history"].append({
+            "timestamp": datetime.now().strftime("%I:%M %p"),
+            "input_type": "text",
+            "input_preview": text_input[:80],
+            "results": results,
+        })
         display_results(results)
     else:
         st.warning("No factual claims could be extracted from this text.")
@@ -123,9 +133,45 @@ if url_submit and url_input.strip():
         status.update(label="Fact-check complete!", state="complete")
 
     if results:
+        st.session_state["history"].append({
+            "timestamp": datetime.now().strftime("%I:%M %p"),
+            "input_type": "url",
+            "input_preview": url_input,
+            "results": results,
+        })
         display_results(results)
     else:
         st.warning("No factual claims could be extracted from this URL.")
 
 elif url_submit:
     st.warning("Please enter a URL to fact-check.")
+
+# --- Sidebar: Session History ---
+with st.sidebar:
+    st.header("Session History")
+    history = st.session_state["history"]
+
+    if not history:
+        st.caption("No fact-checks yet this session.")
+    else:
+        for entry in reversed(history):
+            verdicts = [r.verdict for r in entry["results"]]
+            counts = {v: verdicts.count(v) for v in set(verdicts)}
+            summary_parts = [f"{n} {v.capitalize()}" for v, n in counts.items()]
+            summary = ", ".join(summary_parts)
+
+            label = f"{entry['timestamp']} — {summary}"
+            with st.expander(label):
+                kind = "Text" if entry["input_type"] == "text" else "URL"
+                preview = entry["input_preview"]
+                st.caption(f"**{kind}:** {preview}")
+                for i, r in enumerate(entry["results"], 1):
+                    style = VERDICT_STYLES.get(r.verdict, VERDICT_STYLES["uncertain"])
+                    st.markdown(
+                        f"{style['emoji']} **{r.verdict.upper()}** — {r.claim}"
+                    )
+                    st.markdown(f"*{r.reason}*")
+
+        if st.button("Clear History"):
+            st.session_state["history"] = []
+            st.rerun()
