@@ -8,7 +8,9 @@ def _get_secret(key: str) -> str | None:
     """Read a secret from Streamlit Cloud secrets (if available), else env vars."""
     try:
         import streamlit as st
-        return st.secrets.get(key)
+        val = st.secrets.get(key)
+        if val is not None:
+            return val
     except Exception:
         pass
     return os.getenv(key)
