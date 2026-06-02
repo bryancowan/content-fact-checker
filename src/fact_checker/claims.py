@@ -5,6 +5,13 @@ import requests
 from bs4 import BeautifulSoup
 
 from .llm import call_cerebras_chat
+from .url_guard import UnsafeURLError, validate_public_url
+
+# Cap how much of a response we read, to avoid memory abuse from a hostile or
+# huge response. Generous for real articles.
+MAX_RESPONSE_BYTES = 3 * 1024 * 1024
+# Cap manual redirect following.
+MAX_REDIRECTS = 5
 
 
 def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
@@ -39,12 +46,47 @@ def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
         return []
 
 
+def _safe_get_text(url: str) -> str:
+    """Fetch a URL's body as text with SSRF protection.
+
+    Validates the target against the SSRF guard before each request, and follows
+    redirects manually so every hop's destination is re-validated (the default
+    requests redirect handling would otherwise let a public URL redirect into an
+    internal address). Reads at most MAX_RESPONSE_BYTES of the body.
+    """
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        validate_public_url(current)
+        response = requests.get(
+            current, timeout=15, allow_redirects=False, stream=True
+        )
+        try:
+            if response.is_redirect or response.is_permanent_redirect:
+                location = response.headers.get("Location")
+                if not location:
+                    raise UnsafeURLError("Redirect with no Location header")
+                # Resolve relative redirects against the current URL.
+                current = requests.compat.urljoin(current, location)
+                continue
+
+            response.raise_for_status()
+            # Bound the amount we read into memory.
+            content = response.raw.read(MAX_RESPONSE_BYTES + 1, decode_content=True)
+            if len(content) > MAX_RESPONSE_BYTES:
+                raise UnsafeURLError("Response exceeds maximum allowed size")
+            encoding = response.encoding or response.apparent_encoding or "utf-8"
+            return content.decode(encoding, errors="replace")
+        finally:
+            response.close()
+
+    raise UnsafeURLError("Too many redirects")
+
+
 def extract_claims_from_url(url: str, max_claims: int = 8) -> list[str]:
     """Fetch a URL's content and extract atomic factual claims from it."""
     try:
-        response = requests.get(url, timeout=15)
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
+        html = _safe_get_text(url)
+        soup = BeautifulSoup(html, "html.parser")
 
         main_content = soup.find("article") or soup.find("main")
         if main_content:
@@ -57,5 +99,5 @@ def extract_claims_from_url(url: str, max_claims: int = 8) -> list[str]:
             return []
 
         return extract_claims_from_text(main_text, max_claims=max_claims)
-    except requests.exceptions.RequestException:
+    except (requests.exceptions.RequestException, UnsafeURLError):
         return []
