@@ -1,4 +1,5 @@
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -8,6 +9,7 @@ def _get_secret(key: str) -> str | None:
     """Read a secret from Streamlit Cloud secrets (if available), else env vars."""
     try:
         import streamlit as st
+
         val = st.secrets.get(key)
         if val is not None:
             return val

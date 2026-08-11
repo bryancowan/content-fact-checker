@@ -1,6 +1,5 @@
 import base64
 import json
-import re
 
 import requests
 from bs4 import BeautifulSoup
@@ -15,17 +14,27 @@ MAX_RESPONSE_BYTES = 3 * 1024 * 1024
 # Cap manual redirect following.
 MAX_REDIRECTS = 5
 
+_CLAIMS_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "extracted_claims",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "claims": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["claims"],
+            "additionalProperties": False,
+        },
+    },
+}
+
 
 def _parse_claims_json(raw: str, max_claims: int) -> list[str]:
     """Parse a claim-extraction LLM response of the form {"claims": [...]}."""
-    raw = raw.strip()
-
-    # Strip markdown code fences if present
-    raw = re.sub(r"^\s*```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\s*```\s*$", "", raw)
-
     try:
-        data = json.loads(raw)
+        data = json.loads(raw.strip())
         claims = data.get("claims", [])
         claims = [c.strip() for c in claims if isinstance(c, str) and c.strip()]
         return claims[:max_claims]
@@ -49,7 +58,11 @@ def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
 
     user_prompt = f"Text:\n\n{text}\n\nExtract up to {max_claims} factual claims."
 
-    raw = call_cerebras_chat(user_content=user_prompt, system_content=system_prompt)
+    raw = call_cerebras_chat(
+        user_content=user_prompt,
+        system_content=system_prompt,
+        response_format=_CLAIMS_RESPONSE_FORMAT,
+    )
     return _parse_claims_json(raw, max_claims)
 
 
@@ -86,6 +99,7 @@ def extract_claims_from_image(image_bytes: bytes, mime_type: str, max_claims: in
         user_content=user_prompt,
         system_content=system_prompt,
         image_data_urls=[data_uri],
+        response_format=_CLAIMS_RESPONSE_FORMAT,
     )
     return _parse_claims_json(raw, max_claims)
 
@@ -101,9 +115,7 @@ def _safe_get_text(url: str) -> str:
     current = url
     for _ in range(MAX_REDIRECTS + 1):
         validate_public_url(current)
-        response = requests.get(
-            current, timeout=15, allow_redirects=False, stream=True
-        )
+        response = requests.get(current, timeout=15, allow_redirects=False, stream=True)
         try:
             if response.is_redirect or response.is_permanent_redirect:
                 location = response.headers.get("Location")

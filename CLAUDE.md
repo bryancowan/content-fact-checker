@@ -43,4 +43,8 @@ This is a Streamlit web app (`web_app.py`) backed by a library in `src/fact_chec
 - `src/fact_checker/claims.py` — LLM-based claim extraction from text, URL, or image (PNG/JPEG only)
 - `src/fact_checker/checker.py` — `fact_check_text()` / `fact_check_url()` / `fact_check_image()` orchestrate the full pipeline; `ClaimResult` dataclass holds verdict/reason/sources
 
-`web_app.py` adds `src/` to `sys.path` and imports directly from `fact_checker`. There are no tests.
+`web_app.py` adds `src/` to `sys.path` and imports directly from `fact_checker`.
+
+## Testing
+
+`pytest` covers `url_guard.py` (SSRF guard), `rate_limiter.py` (sliding-window behavior), `llm.py` (message/content-block construction), `claims.py` and `checker.py` (structured-output JSON parsing and pipeline orchestration), and `search.py` (Parallel API call shape and evidence formatting). All of it runs offline — `tests/conftest.py` stubs the Cerebras/Parallel SDK modules, and individual tests monkeypatch `call_cerebras_chat`/`search_web`/the client getters rather than hitting the network.

@@ -3,14 +3,13 @@
 
 import argparse
 import mimetypes
-import sys
 import os
+import sys
 
 # Add src to path so the fact_checker package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from fact_checker import fact_check_image, fact_check_text, fact_check_url, ClaimResult
-
+from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_check_url
 
 # ANSI color codes for terminal output
 GREEN = "\033[92m"
@@ -34,7 +33,7 @@ def print_progress(message: str, current: int, total: int):
 
 def print_results(results: list[ClaimResult]):
     print(f"\n{BOLD}{'=' * 60}")
-    print(f"  FACT-CHECK RESULTS")
+    print("  FACT-CHECK RESULTS")
     print(f"{'=' * 60}{RESET}\n")
 
     for i, r in enumerate(results, 1):
@@ -43,7 +42,7 @@ def print_results(results: list[ClaimResult]):
         print(f"  Verdict: {color}{BOLD}{r.verdict.upper()}{RESET}")
         print(f"  Reason:  {r.reason}")
         if r.sources:
-            print(f"  Sources:")
+            print("  Sources:")
             for s in r.sources:
                 print(f"    - {s}")
         print()

@@ -1,12 +1,29 @@
 import json
-import re
 import textwrap
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 from .claims import extract_claims_from_image, extract_claims_from_text, extract_claims_from_url
 from .llm import call_cerebras_chat
-from .search import search_web, build_evidence_context
+from .search import build_evidence_context, search_web
+
+_VERDICT_RESPONSE_FORMAT = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "claim_verdict",
+        "strict": True,
+        "schema": {
+            "type": "object",
+            "properties": {
+                "verdict": {"type": "string", "enum": ["true", "false", "uncertain"]},
+                "reason": {"type": "string"},
+                "top_sources": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": ["verdict", "reason", "top_sources"],
+            "additionalProperties": False,
+        },
+    },
+}
 
 
 @dataclass
@@ -20,7 +37,7 @@ class ClaimResult:
 def fact_check_single_claim(claim: str) -> ClaimResult:
     """Fact-check a single claim: search for evidence, then judge with the LLM."""
     # Search the web for evidence
-    results = search_web(query=claim, num=6, mode="one-shot")
+    results = search_web(query=claim, num=6, mode="advanced")
     evidence_context = build_evidence_context(results)
 
     system_prompt = (
@@ -46,17 +63,20 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
     {evidence_context}
     """)
 
-    raw = call_cerebras_chat(user_content=user_prompt, system_content=system_prompt)
-    raw = raw.strip()
-
-    # Strip markdown code fences
-    raw = re.sub(r"^\s*```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\s*```\s*$", "", raw)
+    raw = call_cerebras_chat(
+        user_content=user_prompt,
+        system_content=system_prompt,
+        response_format=_VERDICT_RESPONSE_FORMAT,
+    )
 
     try:
-        data = json.loads(raw)
+        data = json.loads(raw.strip())
     except Exception:
-        data = {"verdict": "uncertain", "reason": "Could not parse model output.", "top_sources": []}
+        data = {
+            "verdict": "uncertain",
+            "reason": "Could not parse model output.",
+            "top_sources": [],
+        }
 
     verdict = str(data.get("verdict", "uncertain")).lower()
     if verdict not in {"true", "false", "uncertain"}:
@@ -78,7 +98,7 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
 def fact_check_text(
     text: str,
     max_claims: int = 6,
-    on_progress: Optional[Callable[[str, int, int], None]] = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> list[ClaimResult]:
     """Full pipeline: extract claims from text, then fact-check each one.
 
@@ -102,7 +122,7 @@ def fact_check_text(
 def fact_check_url(
     url: str,
     max_claims: int = 6,
-    on_progress: Optional[Callable[[str, int, int], None]] = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> list[ClaimResult]:
     """Full pipeline: extract claims from a URL, then fact-check each one."""
     claims = extract_claims_from_url(url, max_claims=max_claims)
@@ -123,7 +143,7 @@ def fact_check_image(
     image_bytes: bytes,
     mime_type: str,
     max_claims: int = 6,
-    on_progress: Optional[Callable[[str, int, int], None]] = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
 ) -> list[ClaimResult]:
     """Full pipeline: extract claims from an image, then fact-check each one."""
     claims = extract_claims_from_image(image_bytes, mime_type, max_claims=max_claims)

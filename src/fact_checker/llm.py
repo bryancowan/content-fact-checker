@@ -1,5 +1,5 @@
 from .clients import get_cerebras_client
-from .config import CEREBRAS_MODEL_NAME, DEFAULT_TEMPERATURE, DEFAULT_TOP_P, DEFAULT_MAX_TOKENS
+from .config import CEREBRAS_MODEL_NAME, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE, DEFAULT_TOP_P
 from .rate_limiter import cerebras_rate_limiter
 
 
@@ -7,6 +7,7 @@ def call_cerebras_chat(
     user_content: str,
     system_content: str | None = None,
     image_data_urls: list[str] | None = None,
+    response_format: dict | None = None,
     temperature: float = DEFAULT_TEMPERATURE,
     top_p: float = DEFAULT_TOP_P,
     max_tokens: int = DEFAULT_MAX_TOKENS,
@@ -16,6 +17,9 @@ def call_cerebras_chat(
     If image_data_urls is provided, the user message is sent as a
     multimodal content array (text + one or more image_url blocks) per
     Cerebras' vision input format.
+
+    If response_format is provided (e.g. a json_schema spec), it's passed
+    through to constrain the model's output to that schema.
 
     Returns the model's response text.
     """
@@ -33,11 +37,16 @@ def call_cerebras_chat(
 
     cerebras_rate_limiter.wait_if_needed()
 
+    extra_kwargs = {}
+    if response_format is not None:
+        extra_kwargs["response_format"] = response_format
+
     resp = get_cerebras_client().chat.completions.create(
         model=CEREBRAS_MODEL_NAME,
         messages=messages,
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,
+        **extra_kwargs,
     )
     return resp.choices[0].message.content

@@ -36,7 +36,7 @@ Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cook
 
 ### Prerequisites
 
-- Python 3.10+
+- Python 3.13 (tested/deployed version; 3.10+ should also work)
 - A [Cerebras API key](https://cloud.cerebras.ai/) (free tier available)
 - A [Parallel API key](https://platform.parallel.ai/) (free tier available)
 

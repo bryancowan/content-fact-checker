@@ -24,12 +24,16 @@ def _fake_getaddrinfo(ip: str):
 
 # --- Schemes -------------------------------------------------------------
 
-@pytest.mark.parametrize("url", [
-    "file:///etc/passwd",
-    "ftp://example.com/x",
-    "gopher://example.com/x",
-    "data:text/plain,hi",
-])
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "file:///etc/passwd",
+        "ftp://example.com/x",
+        "gopher://example.com/x",
+        "data:text/plain,hi",
+    ],
+)
 def test_rejects_disallowed_schemes(url):
     with pytest.raises(UnsafeURLError):
         validate_public_url(url)
@@ -42,23 +46,28 @@ def test_rejects_missing_host():
 
 # --- Literal internal IPs (no DNS needed) --------------------------------
 
-@pytest.mark.parametrize("url", [
-    "http://127.0.0.1/",
-    "http://127.0.0.1:8501/",
-    "http://169.254.169.254/latest/meta-data/",
-    "http://10.0.0.1/",
-    "http://192.168.1.1/",
-    "http://172.16.0.1/",
-    "http://[::1]/",
-    "http://0.0.0.0/",
-    "http://[::ffff:127.0.0.1]/",
-])
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/",
+        "http://127.0.0.1:8501/",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.1/",
+        "http://192.168.1.1/",
+        "http://172.16.0.1/",
+        "http://[::1]/",
+        "http://0.0.0.0/",
+        "http://[::ffff:127.0.0.1]/",
+    ],
+)
 def test_rejects_internal_ip_literals(url):
     with pytest.raises(UnsafeURLError):
         validate_public_url(url)
 
 
 # --- Hostname resolution -------------------------------------------------
+
 
 def test_rejects_hostname_resolving_to_private(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo("10.0.0.5"))
@@ -88,6 +97,7 @@ def test_rejects_unresolvable_host(monkeypatch):
 
 
 # --- extract_claims_from_url short-circuits without fetching -------------
+
 
 def test_extract_claims_blocks_internal_without_request(monkeypatch):
     called = {"hit": False}

@@ -1,5 +1,6 @@
 from cerebras.cloud.sdk import Cerebras
 from parallel import Parallel
+
 from .config import CEREBRAS_API_KEY, PARALLEL_API_KEY
 
 _cerebras_client = None

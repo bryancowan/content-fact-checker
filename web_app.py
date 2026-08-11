@@ -1,14 +1,15 @@
 """Content Fact-Checker — Streamlit Web Interface"""
 
-import sys
+import hmac
 import os
+import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 import streamlit as st
-from fact_checker import fact_check_image, fact_check_text, fact_check_url, ClaimResult
 
+from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_check_url
 
 st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
 
@@ -26,7 +27,7 @@ def _check_password() -> bool:
     st.title("Content Fact-Checker")
     pw = st.text_input("Enter the access password:", type="password")
     if st.button("Submit", type="primary"):
-        if pw == correct_pw:
+        if hmac.compare_digest(pw, correct_pw):
             st.session_state["authenticated"] = True
             st.rerun()
         else:
@@ -58,7 +59,10 @@ with tab_text:
     text_input = st.text_area(
         "Paste the text you want to fact-check:",
         height=200,
-        placeholder="e.g., The Earth is flat and the moon is made of cheese. Albert Einstein was born in Germany in 1879.",
+        placeholder=(
+            "e.g., The Earth is flat and the moon is made of cheese. "
+            "Albert Einstein was born in Germany in 1879."
+        ),
     )
     text_submit = st.button("Fact-Check Text", type="primary", key="text_btn")
 
@@ -109,54 +113,70 @@ def display_results(results: list[ClaimResult]):
 
 
 if text_submit and text_input.strip():
-    with st.status("Fact-checking text...", expanded=True) as status:
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
+    results = []
+    text_error = None
+    try:
+        with st.status("Fact-checking text...", expanded=True) as status:
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
 
-        def on_text_progress(message: str, current: int, total: int):
-            progress_bar.progress((current + 1) / total)
-            progress_text.text(message)
+            def on_text_progress(message: str, current: int, total: int):
+                progress_bar.progress((current + 1) / total)
+                progress_text.text(message)
 
-        results = fact_check_text(text_input, on_progress=on_text_progress)
-        progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
-        status.update(label="Fact-check complete!", state="complete")
+            results = fact_check_text(text_input, on_progress=on_text_progress)
+            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            status.update(label="Fact-check complete!", state="complete")
+    except Exception as e:
+        text_error = str(e)
+        st.error(f"Something went wrong while fact-checking: {text_error}")
 
     if results:
-        st.session_state["history"].append({
-            "timestamp": datetime.now().strftime("%I:%M %p"),
-            "input_type": "text",
-            "input_preview": text_input[:80],
-            "results": results,
-        })
+        st.session_state["history"].append(
+            {
+                "timestamp": datetime.now().strftime("%I:%M %p"),
+                "input_type": "text",
+                "input_preview": text_input[:80],
+                "results": results,
+            }
+        )
         display_results(results)
-    else:
+    elif text_error is None:
         st.warning("No factual claims could be extracted from this text.")
 
 elif text_submit:
     st.warning("Please enter some text to fact-check.")
 
 if url_submit and url_input.strip():
-    with st.status("Fetching URL and fact-checking...", expanded=True) as status:
-        progress_bar = st.progress(0)
-        progress_text = st.empty()
+    results = []
+    url_error = None
+    try:
+        with st.status("Fetching URL and fact-checking...", expanded=True) as status:
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
 
-        def on_url_progress(message: str, current: int, total: int):
-            progress_bar.progress((current + 1) / total)
-            progress_text.text(message)
+            def on_url_progress(message: str, current: int, total: int):
+                progress_bar.progress((current + 1) / total)
+                progress_text.text(message)
 
-        results = fact_check_url(url_input, on_progress=on_url_progress)
-        progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
-        status.update(label="Fact-check complete!", state="complete")
+            results = fact_check_url(url_input, on_progress=on_url_progress)
+            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            status.update(label="Fact-check complete!", state="complete")
+    except Exception as e:
+        url_error = str(e)
+        st.error(f"Something went wrong while fact-checking: {url_error}")
 
     if results:
-        st.session_state["history"].append({
-            "timestamp": datetime.now().strftime("%I:%M %p"),
-            "input_type": "url",
-            "input_preview": url_input,
-            "results": results,
-        })
+        st.session_state["history"].append(
+            {
+                "timestamp": datetime.now().strftime("%I:%M %p"),
+                "input_type": "url",
+                "input_preview": url_input,
+                "results": results,
+            }
+        )
         display_results(results)
-    else:
+    elif url_error is None:
         st.warning("No factual claims could be extracted from this URL.")
 
 elif url_submit:
@@ -182,14 +202,19 @@ if image_submit and image_input is not None:
     except ValueError as e:
         image_error = str(e)
         st.error(image_error)
+    except Exception as e:
+        image_error = str(e)
+        st.error(f"Something went wrong while fact-checking: {image_error}")
 
     if results:
-        st.session_state["history"].append({
-            "timestamp": datetime.now().strftime("%I:%M %p"),
-            "input_type": "image",
-            "input_preview": image_input.name,
-            "results": results,
-        })
+        st.session_state["history"].append(
+            {
+                "timestamp": datetime.now().strftime("%I:%M %p"),
+                "input_type": "image",
+                "input_preview": image_input.name,
+                "results": results,
+            }
+        )
         display_results(results)
     elif image_error is None:
         st.warning("No factual claims could be extracted from this image.")
@@ -213,14 +238,13 @@ with st.sidebar:
 
             label = f"{entry['timestamp']} — {summary}"
             with st.expander(label):
-                kind = {"text": "Text", "url": "URL", "image": "Image"}.get(entry["input_type"], "Text")
+                kind_labels = {"text": "Text", "url": "URL", "image": "Image"}
+                kind = kind_labels.get(entry["input_type"], "Text")
                 preview = entry["input_preview"]
                 st.caption(f"**{kind}:** {preview}")
-                for i, r in enumerate(entry["results"], 1):
+                for r in entry["results"]:
                     style = VERDICT_STYLES.get(r.verdict, VERDICT_STYLES["uncertain"])
-                    st.markdown(
-                        f"{style['emoji']} **{r.verdict.upper()}** — {r.claim}"
-                    )
+                    st.markdown(f"{style['emoji']} **{r.verdict.upper()}** — {r.claim}")
                     st.markdown(f"*{r.reason}*")
 
         if st.button("Clear History"):
