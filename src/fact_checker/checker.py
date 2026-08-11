@@ -4,7 +4,7 @@ import textwrap
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-from .claims import extract_claims_from_text, extract_claims_from_url
+from .claims import extract_claims_from_image, extract_claims_from_text, extract_claims_from_url
 from .llm import call_cerebras_chat
 from .search import search_web, build_evidence_context
 
@@ -106,6 +106,27 @@ def fact_check_url(
 ) -> list[ClaimResult]:
     """Full pipeline: extract claims from a URL, then fact-check each one."""
     claims = extract_claims_from_url(url, max_claims=max_claims)
+    if not claims:
+        return []
+
+    results = []
+    for i, claim in enumerate(claims):
+        if on_progress:
+            on_progress(f"Checking claim {i + 1}/{len(claims)}: {claim}", i, len(claims))
+        result = fact_check_single_claim(claim)
+        results.append(result)
+
+    return results
+
+
+def fact_check_image(
+    image_bytes: bytes,
+    mime_type: str,
+    max_claims: int = 6,
+    on_progress: Optional[Callable[[str, int, int], None]] = None,
+) -> list[ClaimResult]:
+    """Full pipeline: extract claims from an image, then fact-check each one."""
+    claims = extract_claims_from_image(image_bytes, mime_type, max_claims=max_claims)
     if not claims:
         return []
 

@@ -7,7 +7,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 import streamlit as st
-from fact_checker import fact_check_text, fact_check_url, ClaimResult
+from fact_checker import fact_check_image, fact_check_text, fact_check_url, ClaimResult
 
 
 st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
@@ -42,7 +42,7 @@ if "history" not in st.session_state:
 
 st.title("Content Fact-Checker")
 st.markdown(
-    "Extract claims from text or URLs, retrieve real-world evidence, "
+    "Extract claims from text, URLs, or images, retrieve real-world evidence, "
     "and evaluate each claim as **True**, **False**, or **Uncertain**."
 )
 
@@ -52,7 +52,7 @@ VERDICT_STYLES = {
     "uncertain": {"emoji": "⚠️", "color": "#ffc107"},
 }
 
-tab_text, tab_url = st.tabs(["Check Text", "Check URL"])
+tab_text, tab_url, tab_image = st.tabs(["Check Text", "Check URL", "Check Image"])
 
 with tab_text:
     text_input = st.text_area(
@@ -68,6 +68,13 @@ with tab_url:
         placeholder="https://www.example.com/article",
     )
     url_submit = st.button("Fact-Check URL", type="primary", key="url_btn")
+
+with tab_image:
+    image_input = st.file_uploader(
+        "Upload an image to fact-check (e.g. a screenshot, chart, or infographic):",
+        type=["png", "jpg", "jpeg"],
+    )
+    image_submit = st.button("Fact-Check Image", type="primary", key="image_btn")
 
 
 _GREEN_BAR_HTML = (
@@ -155,6 +162,41 @@ if url_submit and url_input.strip():
 elif url_submit:
     st.warning("Please enter a URL to fact-check.")
 
+if image_submit and image_input is not None:
+    results = []
+    image_error = None
+    try:
+        with st.status("Analyzing image and fact-checking...", expanded=True) as status:
+            progress_bar = st.progress(0)
+            progress_text = st.empty()
+
+            def on_image_progress(message: str, current: int, total: int):
+                progress_bar.progress((current + 1) / total)
+                progress_text.text(message)
+
+            results = fact_check_image(
+                image_input.getvalue(), image_input.type, on_progress=on_image_progress
+            )
+            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            status.update(label="Fact-check complete!", state="complete")
+    except ValueError as e:
+        image_error = str(e)
+        st.error(image_error)
+
+    if results:
+        st.session_state["history"].append({
+            "timestamp": datetime.now().strftime("%I:%M %p"),
+            "input_type": "image",
+            "input_preview": image_input.name,
+            "results": results,
+        })
+        display_results(results)
+    elif image_error is None:
+        st.warning("No factual claims could be extracted from this image.")
+
+elif image_submit:
+    st.warning("Please upload an image to fact-check.")
+
 # --- Sidebar: Session History ---
 with st.sidebar:
     st.header("Session History")
@@ -171,7 +213,7 @@ with st.sidebar:
 
             label = f"{entry['timestamp']} — {summary}"
             with st.expander(label):
-                kind = "Text" if entry["input_type"] == "text" else "URL"
+                kind = {"text": "Text", "url": "URL", "image": "Image"}.get(entry["input_type"], "Text")
                 preview = entry["input_preview"]
                 st.caption(f"**{kind}:** {preview}")
                 for i, r in enumerate(entry["results"], 1):

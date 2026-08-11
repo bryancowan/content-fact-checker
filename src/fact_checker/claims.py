@@ -1,9 +1,11 @@
+import base64
 import json
 import re
 
 import requests
 from bs4 import BeautifulSoup
 
+from .config import ALLOWED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES
 from .llm import call_cerebras_chat
 from .url_guard import UnsafeURLError, validate_public_url
 
@@ -12,6 +14,23 @@ from .url_guard import UnsafeURLError, validate_public_url
 MAX_RESPONSE_BYTES = 3 * 1024 * 1024
 # Cap manual redirect following.
 MAX_REDIRECTS = 5
+
+
+def _parse_claims_json(raw: str, max_claims: int) -> list[str]:
+    """Parse a claim-extraction LLM response of the form {"claims": [...]}."""
+    raw = raw.strip()
+
+    # Strip markdown code fences if present
+    raw = re.sub(r"^\s*```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"\s*```\s*$", "", raw)
+
+    try:
+        data = json.loads(raw)
+        claims = data.get("claims", [])
+        claims = [c.strip() for c in claims if isinstance(c, str) and c.strip()]
+        return claims[:max_claims]
+    except Exception:
+        return []
 
 
 def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
@@ -31,19 +50,44 @@ def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
     user_prompt = f"Text:\n\n{text}\n\nExtract up to {max_claims} factual claims."
 
     raw = call_cerebras_chat(user_content=user_prompt, system_content=system_prompt)
-    raw = raw.strip()
+    return _parse_claims_json(raw, max_claims)
 
-    # Strip markdown code fences if present
-    raw = re.sub(r"^\s*```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
-    raw = re.sub(r"\s*```\s*$", "", raw)
 
-    try:
-        data = json.loads(raw)
-        claims = data.get("claims", [])
-        claims = [c.strip() for c in claims if isinstance(c, str) and c.strip()]
-        return claims[:max_claims]
-    except Exception:
-        return []
+def extract_claims_from_image(image_bytes: bytes, mime_type: str, max_claims: int = 8) -> list[str]:
+    """Use the Cerebras vision model to extract atomic factual claims from an image.
+
+    Covers both claims stated as text in the image (e.g. a screenshot) and
+    claims implied by its visual content (e.g. a chart or photo caption).
+    """
+    if mime_type not in ALLOWED_IMAGE_MIME_TYPES:
+        raise ValueError(f"Unsupported image type: {mime_type}. Use PNG or JPEG.")
+    if len(image_bytes) > MAX_IMAGE_BYTES:
+        raise ValueError(f"Image exceeds maximum allowed size of {MAX_IMAGE_BYTES} bytes.")
+
+    data_uri = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
+
+    system_prompt = (
+        "You are an information extraction assistant.\n"
+        f"From the user's image, extract up to {max_claims} atomic factual claims.\n"
+        "Consider both text visible in the image (e.g. a screenshot or caption) and\n"
+        "claims implied by its visual content (e.g. a chart, photo, or infographic).\n"
+        "Each claim should:\n"
+        "- Be checkable against external sources (dates, numbers, named entities)\n"
+        "- Be concrete and not an opinion.\n\n"
+        "Return STRICT JSON:\n"
+        "{\n"
+        '  "claims": ["...", "..."]\n'
+        "}\n"
+    )
+
+    user_prompt = f"Extract up to {max_claims} factual claims from this image."
+
+    raw = call_cerebras_chat(
+        user_content=user_prompt,
+        system_content=system_prompt,
+        image_data_urls=[data_uri],
+    )
+    return _parse_claims_json(raw, max_claims)
 
 
 def _safe_get_text(url: str) -> str:

@@ -1,14 +1,14 @@
 # Content Fact-Checker
 
-Extracts claims from any text or URL, retrieves real-world evidence using web search, and evaluates each claim as **True**, **False**, or **Uncertain**.
+Extracts claims from any text, URL, or image, retrieves real-world evidence using web search, and evaluates each claim as **True**, **False**, or **Uncertain**.
 
-Powered by the [zai-glm-4.7](https://inference-docs.cerebras.ai/) model on [Cerebras](https://cerebras.ai/) and [Parallel Search](https://parallel.ai/).
+Powered by the [gemma-4-31b](https://inference-docs.cerebras.ai/models/gemma-4-31b) model on [Cerebras](https://cerebras.ai/) and [Parallel Search](https://parallel.ai/).
 
-Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use zai-glm-4.7 instead of gpt-oss-120B.
+Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use gemma-4-31b instead of gpt-oss-120B.
 
 ## How It Works
 
-1. **Extract claims** — The LLM breaks input text into atomic, checkable factual statements
+1. **Extract claims** — The LLM breaks input text, a fetched URL's article body, or an uploaded image into atomic, checkable factual statements
 2. **Search for evidence** — Each claim is searched against the web using Parallel Search
 3. **Judge each claim** — The LLM evaluates evidence and returns a verdict: True, False, or Uncertain, with reasoning and source URLs
 
@@ -21,6 +21,8 @@ Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cook
 **Check URL tab** — enter a URL to analyze:
 
 ![Check URL](assets/web-check-url.png)
+
+**Check Image tab** — upload a screenshot, chart, or infographic to analyze:
 
 **Progress** — each claim is checked in real time:
 
@@ -93,6 +95,12 @@ python cli.py --text "The Eiffel Tower is located in Berlin."
 python cli.py --url "https://www.snopes.com/fact-check/some-article/"
 ```
 
+**Check an image:**
+
+```bash
+python cli.py --image path/to/screenshot.png
+```
+
 **Interactive mode:**
 
 ```bash
@@ -108,9 +116,9 @@ content-fact-checker/
 ├── src/fact_checker/       # Core library (shared by CLI and web)
 │   ├── config.py           # API keys, model settings
 │   ├── clients.py          # Cerebras + Parallel client init
-│   ├── llm.py              # LLM call wrapper (zai-glm-4.7)
+│   ├── llm.py              # LLM call wrapper (gemma-4-31b, text + image inputs)
 │   ├── search.py           # Web search via Parallel
-│   ├── claims.py           # Claim extraction from text/URL
+│   ├── claims.py           # Claim extraction from text/URL/image
 │   ├── checker.py          # Fact-check pipeline
 │   └── rate_limiter.py     # Free tier rate limiting
 ├── cli.py                  # Command-line interface
@@ -121,8 +129,8 @@ content-fact-checker/
 
 ## Free Tier Limits
 
-- **Cerebras**: 10 requests/min, 1M tokens/day
-- A typical fact-check with 6 claims uses 7 API calls, which fits within one minute
+- **Cerebras**: 5 requests/min, 1M tokens/day, max 2 images per request
+- A typical fact-check with 6 claims uses 7 API calls, which takes a bit over a minute on the free tier
 - The app automatically pauses and resumes if you hit the rate limit
 
 ## Troubleshooting
@@ -131,5 +139,6 @@ content-fact-checker/
 |---|---|
 | `ModuleNotFoundError` | Activate the venv: `source .venv/bin/activate` |
 | Safari HTTPS error | Use `http://127.0.0.1:8501` instead of `localhost` |
-| Rate limit pauses | Normal on the free tier (10 req/min). The app waits and resumes automatically |
+| Rate limit pauses | Normal on the free tier (5 req/min). The app waits and resumes automatically |
 | "API key not set" error | Check that `.env` exists with both keys filled in |
+| "Unsupported image type" error | Only PNG and JPEG images are supported |

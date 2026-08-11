@@ -2,13 +2,14 @@
 """Content Fact-Checker CLI — check claims from text or URLs."""
 
 import argparse
+import mimetypes
 import sys
 import os
 
 # Add src to path so the fact_checker package is importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from fact_checker import fact_check_text, fact_check_url, ClaimResult
+from fact_checker import fact_check_image, fact_check_text, fact_check_url, ClaimResult
 
 
 # ANSI color codes for terminal output
@@ -85,11 +86,13 @@ def main():
 Examples:
   python cli.py --text "Albert Einstein was born in Germany in 1879."
   python cli.py --url "https://www.snopes.com/fact-check/drinking-at-disney-world/"
+  python cli.py --image path/to/screenshot.png
   python cli.py                   # interactive mode
         """,
     )
     parser.add_argument("--text", "-t", type=str, help="Text to fact-check")
     parser.add_argument("--url", "-u", type=str, help="URL to fact-check")
+    parser.add_argument("--image", "-i", type=str, help="Path to a PNG/JPEG image to fact-check")
 
     args = parser.parse_args()
 
@@ -106,6 +109,26 @@ Examples:
             print_results(results)
         else:
             print("No claims could be extracted from the URL.")
+    elif args.image:
+        mime_type, _ = mimetypes.guess_type(args.image)
+        try:
+            with open(args.image, "rb") as f:
+                image_bytes = f.read()
+        except OSError as e:
+            print(f"Could not read image file: {e}")
+            sys.exit(1)
+
+        print(f"Analyzing image: {args.image}")
+        try:
+            results = fact_check_image(image_bytes, mime_type or "", on_progress=print_progress)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
+
+        if results:
+            print_results(results)
+        else:
+            print("No claims could be extracted from the image.")
     else:
         interactive_mode()
 
