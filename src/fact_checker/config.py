@@ -18,15 +18,22 @@ def _get_secret(key: str) -> str | None:
     return os.getenv(key)
 
 
-def _get_int(key: str, default: int) -> int:
-    """Read an int setting from secrets/env, falling back to default if unset or invalid."""
+def _get_int(key: str, default: int, minimum: int = 1) -> int:
+    """Read an int setting from secrets/env.
+
+    Falls back to default if the value is unset, unparseable, or below minimum.
+    Out-of-range values are rejected rather than passed through: a rate limit of
+    0, for example, would make RateLimiter index an empty deque and raise before
+    any request was made.
+    """
     raw = _get_secret(key)
     if raw is None:
         return default
     try:
-        return int(str(raw).strip())
+        value = int(str(raw).strip())
     except ValueError:
         return default
+    return value if value >= minimum else default
 
 
 CEREBRAS_API_KEY = _get_secret("CEREBRAS_API_KEY")
@@ -62,7 +69,7 @@ CEREBRAS_REQUESTS_PER_MIN = _get_int("CEREBRAS_REQUESTS_PER_MIN", 300)
 # The SDK already retries 408/409/429/5xx with retry-after-aware exponential
 # backoff; these just widen its defaults (2 retries, 60s) for a slower,
 # reasoning-enabled model.
-CEREBRAS_MAX_RETRIES = _get_int("CEREBRAS_MAX_RETRIES", 5)
+CEREBRAS_MAX_RETRIES = _get_int("CEREBRAS_MAX_RETRIES", 5, minimum=0)
 CEREBRAS_TIMEOUT_SECONDS = 120.0
 
 # Image inputs: qwen-3.8-27b accepts base64 PNG/JPEG data URIs only (no external
