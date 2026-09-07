@@ -133,6 +133,10 @@ content-fact-checker/
 - A typical fact-check with 6 claims uses 7 API calls, which takes a bit over a minute on the free tier
 - The app automatically pauses and resumes if you hit the rate limit
 
+## Hosting
+
+Looking to deploy this somewhere? See [docs/hosting](docs/hosting/README.md) for what this app needs from a host and which platforms fit (and which, like traditional shared hosting, don't).
+
 ## Troubleshooting
 
 | Problem | Fix |
