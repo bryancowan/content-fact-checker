@@ -10,6 +10,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_check_url
+from fact_checker.llm import CerebrasCallError
 
 # ANSI color codes for terminal output
 GREEN = "\033[92m"
@@ -133,4 +134,13 @@ Examples:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except CerebrasCallError as e:
+        # These carry an actionable message (deprecated model, rate limit,
+        # exhausted token budget); a raw traceback would bury it.
+        print(f"\n{RED}Error:{RESET} {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        sys.exit(130)

@@ -21,6 +21,19 @@ def _stub(name, **attrs):
 
 _stub("cerebras")
 _stub("cerebras.cloud")
-_stub("cerebras.cloud.sdk", Cerebras=object)
+
+
+class _StubAPIError(Exception):
+    """Stand-in for the SDK's error hierarchy, which llm.py catches by type."""
+
+
+_stub(
+    "cerebras.cloud.sdk",
+    Cerebras=object,
+    APIStatusError=_StubAPIError,
+    APIConnectionError=type("APIConnectionError", (_StubAPIError,), {}),
+    NotFoundError=type("NotFoundError", (_StubAPIError,), {}),
+    RateLimitError=type("RateLimitError", (_StubAPIError,), {}),
+)
 _stub("parallel", Parallel=object)
 _stub("dotenv", load_dotenv=lambda *a, **k: None)

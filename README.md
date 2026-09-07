@@ -2,9 +2,9 @@
 
 Extracts claims from any text, URL, or image, retrieves real-world evidence using web search, and evaluates each claim as **True**, **False**, or **Uncertain**.
 
-Powered by the [gemma-4-31b](https://inference-docs.cerebras.ai/models/gemma-4-31b) model on [Cerebras](https://cerebras.ai/) and [Parallel Search](https://parallel.ai/).
+Powered by the [qwen-3.8-27b](https://inference-docs.cerebras.ai/models/qwen-3.8-27b) model on [Cerebras](https://cerebras.ai/) and [Parallel Search](https://parallel.ai/).
 
-Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use gemma-4-31b instead of gpt-oss-120B.
+Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use qwen-3.8-27b instead of gpt-oss-120B.
 
 ## How It Works
 
@@ -116,22 +116,40 @@ content-fact-checker/
 ├── src/fact_checker/       # Core library (shared by CLI and web)
 │   ├── config.py           # API keys, model settings
 │   ├── clients.py          # Cerebras + Parallel client init
-│   ├── llm.py              # LLM call wrapper (gemma-4-31b, text + image inputs)
+│   ├── llm.py              # LLM call wrapper (text + image inputs, reasoning)
 │   ├── search.py           # Web search via Parallel
 │   ├── claims.py           # Claim extraction from text/URL/image
 │   ├── checker.py          # Fact-check pipeline
-│   └── rate_limiter.py     # Free tier rate limiting
+│   └── rate_limiter.py     # Client-side request rate limiting
 ├── cli.py                  # Command-line interface
 ├── web_app.py              # Streamlit web interface
 ├── requirements.txt        # Python dependencies
 └── .env.example            # API key template
 ```
 
-## Free Tier Limits
+## Rate Limits
 
-- **Cerebras**: 5 requests/min, 1M tokens/day, max 2 images per request
-- A typical fact-check with 6 claims uses 7 API calls, which takes a bit over a minute on the free tier
-- The app automatically pauses and resumes if you hit the rate limit
+Defaults in `config.py` target the Cerebras **paid Developer tier**: 300 requests/min,
+no daily token cap, and up to 10 images per request.
+
+On the **free trial** tier the limits are much tighter — 5 requests/min, 1M tokens/day,
+and 2 images per request. Set `CEREBRAS_REQUESTS_PER_MIN=5` so the client-side limiter
+paces requests instead of letting the API reject them; a typical 6-claim fact-check
+makes 7 API calls and will take a bit over a minute.
+
+The app pauses and resumes automatically when it hits the client-side limit, and the
+Cerebras SDK retries server-side 429s with exponential backoff.
+
+## Changing the Model
+
+Cerebras retires models regularly (this app has already outlived `zai-glm-4.7` and
+`gemma-4-31b`). Set `CEREBRAS_MODEL_NAME` in your environment, Streamlit secrets, or
+the Render dashboard to move to a current model without a code change — check the
+[deprecation list](https://inference-docs.cerebras.ai/support/deprecation) first.
+
+Note that `qwen-3.8-27b` reasons by default at `high`, and reasoning tokens count
+against the completion budget. If you switch to a model with different reasoning
+behavior, revisit `CEREBRAS_REASONING_EFFORT` and `CEREBRAS_MAX_COMPLETION_TOKENS`.
 
 ## Hosting
 
@@ -146,3 +164,17 @@ Looking to deploy this somewhere? See [docs/hosting](docs/hosting/README.md) for
 | Rate limit pauses | Normal on the free tier (5 req/min). The app waits and resumes automatically |
 | "API key not set" error | Check that `.env` exists with both keys filled in |
 | "Unsupported image type" error | Only PNG and JPEG images are supported |
+| Intermittent 401s, or errors that come and go | Check the provider status pages before debugging — see below |
+
+### Provider status
+
+This app depends on two external APIs. When calls fail intermittently, or an error
+message doesn't match what you're actually sending, **check these first**:
+
+- Parallel (web search) — https://status.parallel.ai
+- Cerebras (inference) — https://status.cerebras.ai
+
+A real outage can produce misleading errors. On 2026-09-07 a Parallel incident
+returned `401 "No API key provided"` for requests that *did* include a valid key,
+which looks exactly like a credential problem and isn't. See
+[docs/incidents/2026-09-07-parallel-search-401.md](docs/incidents/2026-09-07-parallel-search-401.md).

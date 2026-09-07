@@ -1,11 +1,11 @@
 import time
 from collections import deque
 
-from .config import FREE_TIER_REQUESTS_PER_MIN
+from .config import CEREBRAS_REQUESTS_PER_MIN
 
 
 class RateLimiter:
-    def __init__(self, max_requests_per_minute: int = FREE_TIER_REQUESTS_PER_MIN):
+    def __init__(self, max_requests_per_minute: int = CEREBRAS_REQUESTS_PER_MIN):
         self.max_rpm = max_requests_per_minute
         self.timestamps: deque[float] = deque()
 

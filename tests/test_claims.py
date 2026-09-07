@@ -1,5 +1,6 @@
 """Tests for claim extraction and its structured-output JSON parsing."""
 
+import json
 import os
 import sys
 
@@ -7,7 +8,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pytest
 
-from fact_checker import claims
+from fact_checker import claims, config
 
 # --- _parse_claims_json ---------------------------------------------------
 
@@ -82,3 +83,84 @@ def test_extract_claims_from_image_sends_data_uri_and_structured_output(monkeypa
     assert result == ["Claim from image"]
     assert captured["image_data_urls"][0].startswith("data:image/png;base64,")
     assert captured["response_format"] == claims._CLAIMS_RESPONSE_FORMAT
+
+
+def test_long_text_is_truncated_before_the_model_call(monkeypatch):
+    """The URL path can hand over a whole article; it must fit the context window."""
+    captured = {}
+
+    def fake_call(**kwargs):
+        captured.update(kwargs)
+        return json.dumps({"claims": ["c"]})
+
+    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+
+    claims.extract_claims_from_text("x" * (config.MAX_ARTICLE_CHARS * 2))
+
+    sent = captured["user_content"]
+    assert "[Content truncated for length]" in sent
+    # The article body is capped; the surrounding prompt template adds a little.
+    assert "x" * config.MAX_ARTICLE_CHARS in sent
+    assert "x" * (config.MAX_ARTICLE_CHARS + 1) not in sent
+
+
+def test_short_text_is_not_truncated(monkeypatch):
+    captured = {}
+
+    def fake_call(**kwargs):
+        captured.update(kwargs)
+        return json.dumps({"claims": ["c"]})
+
+    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+
+    claims.extract_claims_from_text("a short article")
+
+    assert "[Content truncated for length]" not in captured["user_content"]
+
+
+# --- URL fetching ----------------------------------------------------------
+
+
+class _FakeRawBody:
+    def __init__(self, payload):
+        self._payload = payload
+
+    def read(self, *args, **kwargs):
+        return self._payload
+
+
+class _FakeHTTPResponse:
+    """Minimal stand-in for the streamed requests.Response _safe_get_text uses."""
+
+    is_redirect = False
+    is_permanent_redirect = False
+    encoding = "utf-8"
+    apparent_encoding = "utf-8"
+
+    def __init__(self, payload):
+        self.raw = _FakeRawBody(payload)
+
+    def raise_for_status(self):
+        return None
+
+    def close(self):
+        return None
+
+
+def test_fetch_sends_a_user_agent(monkeypatch):
+    """Without one, the default python-requests UA gets 403'd (e.g. Wikipedia),
+    which would silently surface as "no claims found"."""
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        captured.update(kwargs)
+        return _FakeHTTPResponse(b"<html><body><p>" + b"word " * 50 + b"</p></body></html>")
+
+    monkeypatch.setattr(claims, "validate_public_url", lambda url: None)
+    monkeypatch.setattr(claims.requests, "get", fake_get)
+    monkeypatch.setattr(claims, "extract_claims_from_text", lambda text, max_claims: ["c"])
+
+    claims.extract_claims_from_url("https://example.com/article")
+
+    assert captured["headers"]["User-Agent"] == config.HTTP_USER_AGENT
+    assert "python-requests" not in captured["headers"]["User-Agent"]
