@@ -10,3 +10,6 @@ services:
         sync: false
       - key: PARALLEL_API_KEY
         sync: false
+      # Lets a deprecated model be swapped from the Render dashboard without a deploy.
+      - key: CEREBRAS_MODEL_NAME
+        value: qwen-3.8-27b

@@ -26,6 +26,22 @@ _VERDICT_RESPONSE_FORMAT = {
 }
 
 
+def _filter_to_evidence_urls(candidates: list, evidence_urls: set[str]) -> list[str]:
+    """Keep only cited URLs that actually appeared in the search evidence.
+
+    The model returns top_sources as free-form strings, which are rendered in the
+    UI. Restricting them to URLs the search actually returned drops both
+    hallucinated citations and any link injected via untrusted input (e.g. text
+    embedded in an uploaded image).
+    """
+    kept = []
+    for candidate in candidates:
+        url = str(candidate).strip()
+        if url in evidence_urls and url.startswith(("http://", "https://")):
+            kept.append(url)
+    return kept
+
+
 @dataclass
 class ClaimResult:
     claim: str
@@ -39,6 +55,7 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
     # Search the web for evidence
     results = search_web(query=claim, num=6, mode="advanced")
     evidence_context = build_evidence_context(results)
+    evidence_urls = {str(r["url"]) for r in results if r.get("url")}
 
     system_prompt = (
         "You are a careful, skeptical fact-checking assistant.\n"
@@ -84,8 +101,8 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
 
     top_sources = data.get("top_sources") or []
     if not isinstance(top_sources, list):
-        top_sources = [str(top_sources)]
-    top_sources = [str(u) for u in top_sources][:5]
+        top_sources = [top_sources]
+    top_sources = _filter_to_evidence_urls(top_sources, evidence_urls)[:5]
 
     return ClaimResult(
         claim=claim,

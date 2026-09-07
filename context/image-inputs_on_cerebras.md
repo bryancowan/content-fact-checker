@@ -4,8 +4,13 @@ Source: https://inference-docs.cerebras.ai/capabilities/image-inputs
 
 ## Supported Models
 
-Currently available with `gemma-4-31b`, and with image-capable models deployed on
-Dedicated Endpoints.
+Currently available with `qwen-3.8-27b` on the public shared tier, `gemma-4-31b` on
+Dedicated Endpoints, and other image-capable models on Dedicated Endpoints.
+
+Constraints (as of 2026-09-07): PNG and JPEG only, no external URLs (base64 data URIs
+only), width and height each <= 15,000 px, 10 MiB total request payload, and 2 images
+per request on the free trial / 10 on Developer tier. Images may only appear in `user`
+messages.
 
 ## Request Format
 
