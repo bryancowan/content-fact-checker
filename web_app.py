@@ -19,7 +19,7 @@ st.html(
     """
     <style>
       a {
-        text-decoration-color: #b7d3cb !important;
+        text-decoration-color: #5f8f82 !important; /* bryancowan.com's --underline */
         text-decoration-thickness: 0.18em !important;
         text-underline-offset: 0.12em;
       }
