@@ -1,0 +1,7 @@
+# CodeRabbit settings: https://docs.coderabbit.ai/reference/configuration
+reviews:
+  pre_merge_checks:
+    # The repo doesn't use docstrings on small, self-describing functions (e.g. web_app.py's
+    # progress callbacks), so the default 80% coverage check only adds noise.
+    docstrings:
+      mode: "off"
