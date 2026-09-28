@@ -1,0 +1,45 @@
+[server]
+# Local dev only. Render passes --server.address 0.0.0.0 (render.yaml), which overrides this.
+address = "127.0.0.1"
+
+# Theme mirrors bryancowan.com (personal-website/src/styles/global.css) so the
+# factchecker.bryancowan.com subdomain reads as part of the same site. Update both together.
+[theme]
+font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300..700&display=swap, sans-serif"
+headingFont = "Newsreader:https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300..700&display=swap, serif"
+headingFontWeights = 500
+baseRadius = "0.375rem"
+buttonRadius = "full"
+linkUnderline = true
+showWidgetBorder = true
+
+[theme.light]
+backgroundColor = "#eeefea"        # --paper
+secondaryBackgroundColor = "#e3e5de" # --muted
+textColor = "#1f2621"              # --ink
+primaryColor = "#1f2621"           # --button (ink pill)
+borderColor = "#d4d7cf"            # --rule
+linkColor = "#1f2621"
+codeBackgroundColor = "#e3e5de"
+# Verdict colors: not on the site, tuned to sit in its sage palette.
+greenColor = "#3f7d5a"
+redColor = "#b4533f"
+yellowColor = "#a8832a"
+
+[theme.light.sidebar]
+backgroundColor = "#f4f5f1"        # --card
+
+[theme.dark]
+backgroundColor = "#161b18"
+secondaryBackgroundColor = "#222a26"
+textColor = "#e4e8e2"
+primaryColor = "#3f6b5f"           # deep mint: Streamlit forces white button text, so the site's light pill won't work
+borderColor = "#2c342f"
+linkColor = "#e4e8e2"
+codeBackgroundColor = "#222a26"
+greenColor = "#7fb89a"
+redColor = "#e08a78"
+yellowColor = "#d9b95c"
+
+[theme.dark.sidebar]
+backgroundColor = "#1c221f"
