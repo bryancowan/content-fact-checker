@@ -1,17 +1,64 @@
 [server]
 # Local dev only. Render passes --server.address 0.0.0.0 (render.yaml), which overrides this.
 address = "127.0.0.1"
+# Serves static/ at app/static/ — used for the self-hosted fonts below.
+enableStaticServing = true
 
 # Theme mirrors bryancowan.com (personal-website/src/styles/global.css) so the
 # factchecker.bryancowan.com subdomain reads as part of the same site. Update both together.
 [theme]
-font = "'IBM Plex Sans':https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300..700&display=swap, sans-serif"
-headingFont = "Newsreader:https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300..700&display=swap, serif"
+# Fonts are self-hosted from static/fonts (copied from the site's @fontsource-variable packages)
+# so visitors' browsers don't make requests to Google Fonts.
+font = "'IBM Plex Sans', sans-serif"
+headingFont = "Newsreader, serif"
 headingFontWeights = 500
 baseRadius = "0.375rem"
 buttonRadius = "full"
 linkUnderline = true
 showWidgetBorder = true
+
+# Latin and Latin Extended subsets; the browser only downloads the ones a page uses.
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-wght-normal.woff2"
+weight = "100 700"
+style = "normal"
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-ext-wght-normal.woff2"
+weight = "100 700"
+style = "normal"
+unicodeRange = "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-wght-italic.woff2"
+weight = "100 700"
+style = "italic"
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-ext-wght-italic.woff2"
+weight = "100 700"
+style = "italic"
+unicodeRange = "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
+
+[[theme.fontFaces]]
+family = "Newsreader"
+url = "app/static/fonts/newsreader-latin-opsz-normal.woff2"
+weight = "200 800"
+style = "normal"
+unicodeRange = "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+
+[[theme.fontFaces]]
+family = "Newsreader"
+url = "app/static/fonts/newsreader-latin-ext-opsz-normal.woff2"
+weight = "200 800"
+style = "normal"
+unicodeRange = "U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF"
 
 [theme.light]
 backgroundColor = "#eeefea"        # --paper

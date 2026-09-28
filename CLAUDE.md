@@ -52,8 +52,11 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 The app is served at factchecker.bryancowan.com and mirrors the personal site's design
 (`personal-website/src/styles/global.css`): the palette and fonts (Newsreader headings,
 IBM Plex Sans body) live in `.streamlit/config.toml` under `[theme.light]`/`[theme.dark]`.
-Update both repos together. The few things the theme config can't express (mint link
-underline, active tab color) are in the `st.html` style block at the top of `web_app.py`.
+Update both repos together. Fonts are self-hosted from `static/fonts/` (served via
+`server.enableStaticServing`) rather than Google Fonts, so visitors' browsers never contact
+Google; the files and their OFL licenses come from the site's `@fontsource-variable`
+packages. The few things the theme config can't express (mint link underline, active tab
+color) are in the `st.html` style block at the top of `web_app.py`.
 
 Streamlit always renders primary-button text in white, so the dark theme's `primaryColor`
 is a deep mint rather than the site's light pill. Streamlit also doesn't expose the active
