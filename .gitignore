@@ -2,5 +2,6 @@
 __pycache__/
 *.pyc
 .venv/
-.streamlit/
+# Track the theme in .streamlit/config.toml; keep secrets out.
+.streamlit/secrets.toml
 .DS_Store

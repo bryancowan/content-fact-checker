@@ -13,6 +13,29 @@ from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_ch
 
 st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
 
+# Colors and fonts live in .streamlit/config.toml. This covers what the theme can't:
+# bryancowan.com's mint link underline and ink-colored active tab.
+st.html(
+    """
+    <style>
+      a {
+        text-decoration-color: #b7d3cb !important;
+        text-decoration-thickness: 0.18em !important;
+        text-underline-offset: 0.12em;
+      }
+      a:hover { background: color-mix(in oklab, #b7d3cb 60%, transparent); }
+      /* Streamlit hides its active theme from CSS; this tracks the default "System" setting. */
+      @media (prefers-color-scheme: dark) {
+        a { text-decoration-color: #5d8d80 !important; }
+        a:hover { background: color-mix(in oklab, #5d8d80 35%, transparent); }
+      }
+      .site-link { font-size: 0.9rem; opacity: 0.75; }
+      /* Like the site nav: active tab keeps the ink text; only the underline is accented. */
+      [data-testid="stTab"][aria-selected="true"] { color: inherit; }
+    </style>
+    """
+)
+
 
 def _check_password() -> bool:
     """Gate the app behind a shared password stored in st.secrets."""
@@ -41,16 +64,21 @@ if not _check_password():
 if "history" not in st.session_state:
     st.session_state["history"] = []
 
+st.markdown(
+    '<p class="site-link"><a href="https://bryancowan.com" target="_self">← bryancowan.com</a></p>',
+    unsafe_allow_html=True,
+)
 st.title("Content Fact-Checker")
 st.markdown(
     "Extract claims from text, URLs, or images, retrieve real-world evidence, "
     "and evaluate each claim as **True**, **False**, or **Uncertain**."
 )
 
+# Colors resolve to greenColor/redColor/yellowColor in .streamlit/config.toml.
 VERDICT_STYLES = {
-    "true": {"emoji": "✅", "color": "#28a745"},
-    "false": {"emoji": "❌", "color": "#dc3545"},
-    "uncertain": {"emoji": "⚠️", "color": "#ffc107"},
+    "true": {"label": "True", "color": "green", "icon": ":material/check:"},
+    "false": {"label": "False", "color": "red", "icon": ":material/close:"},
+    "uncertain": {"label": "Uncertain", "color": "yellow", "icon": ":material/help:"},
 }
 
 tab_text, tab_url, tab_image = st.tabs(["Check Text", "Check URL", "Check Image"])
@@ -81,27 +109,19 @@ with tab_image:
     image_submit = st.button("Fact-Check Image", type="primary", key="image_btn")
 
 
-_GREEN_BAR_HTML = (
-    '<div style="width:100%;background:#333;border-radius:4px;overflow:hidden">'
-    '<div style="width:100%;height:8px;background:#28a745;border-radius:4px"></div>'
-    "</div>"
-)
-
-
 def display_results(results: list[ClaimResult]):
     st.markdown("---")
     st.subheader(f"Results: {len(results)} claims checked")
 
     for i, r in enumerate(results, 1):
         style = VERDICT_STYLES.get(r.verdict, VERDICT_STYLES["uncertain"])
-        verdict_display = f"{style['emoji']} **{r.verdict.upper()}**"
 
         with st.container():
             col1, col2 = st.columns([3, 1])
             with col1:
                 st.markdown(f"**Claim {i}:** {r.claim}")
             with col2:
-                st.markdown(verdict_display)
+                st.badge(style["label"], color=style["color"], icon=style["icon"])
 
             st.markdown(f"*{r.reason}*")
 
@@ -125,7 +145,7 @@ if text_submit and text_input.strip():
                 progress_text.text(message)
 
             results = fact_check_text(text_input, on_progress=on_text_progress)
-            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            progress_bar.progress(1.0)
             status.update(label="Fact-check complete!", state="complete")
     except Exception as e:
         text_error = str(e)
@@ -160,7 +180,7 @@ if url_submit and url_input.strip():
                 progress_text.text(message)
 
             results = fact_check_url(url_input, on_progress=on_url_progress)
-            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            progress_bar.progress(1.0)
             status.update(label="Fact-check complete!", state="complete")
     except Exception as e:
         url_error = str(e)
@@ -197,7 +217,7 @@ if image_submit and image_input is not None:
             results = fact_check_image(
                 image_input.getvalue(), image_input.type, on_progress=on_image_progress
             )
-            progress_bar.markdown(_GREEN_BAR_HTML, unsafe_allow_html=True)
+            progress_bar.progress(1.0)
             status.update(label="Fact-check complete!", state="complete")
     except ValueError as e:
         image_error = str(e)
@@ -244,7 +264,8 @@ with st.sidebar:
                 st.caption(f"**{kind}:** {preview}")
                 for r in entry["results"]:
                     style = VERDICT_STYLES.get(r.verdict, VERDICT_STYLES["uncertain"])
-                    st.markdown(f"{style['emoji']} **{r.verdict.upper()}** — {r.claim}")
+                    badge = f":{style['color']}-badge[{style['icon']} {style['label']}]"
+                    st.markdown(f"{badge} {r.claim}")
                     st.markdown(f"*{r.reason}*")
 
         if st.button("Clear History"):

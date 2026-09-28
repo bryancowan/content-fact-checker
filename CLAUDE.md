@@ -47,6 +47,19 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 
 `web_app.py` adds `src/` to `sys.path` and imports directly from `fact_checker`.
 
+## Theming
+
+The app is served at factchecker.bryancowan.com and mirrors the personal site's design
+(`personal-website/src/styles/global.css`): the palette and fonts (Newsreader headings,
+IBM Plex Sans body) live in `.streamlit/config.toml` under `[theme.light]`/`[theme.dark]`.
+Update both repos together. The few things the theme config can't express (mint link
+underline, active tab color) are in the `st.html` style block at the top of `web_app.py`.
+
+Streamlit always renders primary-button text in white, so the dark theme's `primaryColor`
+is a deep mint rather than the site's light pill. Streamlit also doesn't expose the active
+theme to CSS, so the dark link underline follows `prefers-color-scheme` (the default
+"System" setting) and not a manual theme override.
+
 ## Testing
 
 `pytest` covers `url_guard.py` (SSRF guard), `rate_limiter.py` (sliding-window behavior), `llm.py` (message/content-block construction), `claims.py` and `checker.py` (structured-output JSON parsing and pipeline orchestration), and `search.py` (Parallel API call shape and evidence formatting). All of it runs offline — `tests/conftest.py` stubs the Cerebras/Parallel SDK modules, and individual tests monkeypatch `call_cerebras_chat`/`search_web`/the client getters rather than hitting the network.
