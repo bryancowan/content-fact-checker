@@ -92,11 +92,9 @@ every PR. The suite is offline and needs no secrets.
 - Parallel (web search) — https://status.parallel.ai
 - Cerebras (inference) — https://status.cerebras.ai
 
-Provider incidents can surface as errors that point at the wrong thing. On 2026-09-07,
-a Parallel outage returned `401 {"code":16,"message":"No API key provided (C.0)"}` for
-requests that *did* carry a valid `x-api-key`, which reads as a credential bug. About an
-hour went into bisecting headers, request bodies, SDK internals, and connection pooling
-before the status page settled it. Write-up:
+Provider incidents can surface as errors that point at the wrong thing. A Parallel outage
+can return `401 {"code":16,"message":"No API key provided (C.0)"}` for requests that carry
+a valid `x-api-key`, which reads as a credential bug. Example:
 `docs/incidents/2026-09-07-parallel-search-401.md`.
 
 Two things that make this class of bug hard to see:
