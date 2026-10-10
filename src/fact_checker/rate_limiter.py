@@ -1,11 +1,11 @@
 import time
 from collections import deque
 
-from .config import CEREBRAS_REQUESTS_PER_MIN
+from .config import LLM_REQUESTS_PER_MIN
 
 
 class RateLimiter:
-    def __init__(self, max_requests_per_minute: int = CEREBRAS_REQUESTS_PER_MIN):
+    def __init__(self, max_requests_per_minute: int = LLM_REQUESTS_PER_MIN):
         self.max_rpm = max_requests_per_minute
         self.timestamps: deque[float] = deque()
 
@@ -30,5 +30,5 @@ class RateLimiter:
         return waited
 
 
-# Shared instance for all Cerebras API calls
-cerebras_rate_limiter = RateLimiter()
+# Shared instance for all LLM API calls, whichever provider is configured
+llm_rate_limiter = RateLimiter()

@@ -6,7 +6,7 @@ This app is a [Streamlit](https://streamlit.io/) web app. That framework choice 
 
 - **A persistent, long-running Python process.** `streamlit run web_app.py` starts a process that keeps running indefinitely — it is not a stateless script invoked per-request like PHP/CGI, and it is not a static site.
 - **WebSocket support.** Streamlit keeps an open WebSocket connection per browser tab to push UI updates (progress bars, live results) back to the client. A host that only proxies plain HTTP request/response won't work.
-- **Outbound internet access with no strict execution-time cap.** The app calls out to LLM/search APIs (Cerebras, Parallel) while a page is loading; a single fact-check can take upwards of a minute due to free-tier rate limits. Hosts that kill scripts after a short timeout (common on traditional shared hosting) will cut requests off mid-flight.
+- **Outbound internet access with no strict execution-time cap.** The app calls out to LLM/search APIs (OpenAI or Cerebras, Parallel) while a page is loading; a single fact-check can take upwards of a minute on a low-rate-limit API tier (a free trial, say) or with a long article. Hosts that kill scripts after a short timeout (common on traditional shared hosting) will cut requests off mid-flight.
 - **No database, no background workers.** State lives in the browser session's memory only. This simplifies hosting considerably — there's nothing stateful to provision or migrate.
 - Python 3.13 (3.10+ likely works too — see the main [README](../../README.md)).
 
@@ -28,7 +28,7 @@ services:
     startCommand: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
 ```
 
-The pattern is the same on most of these platforms: point them at the repo, set `CEREBRAS_API_KEY` / `PARALLEL_API_KEY` as environment variables/secrets, and use the `streamlit run ... --server.port $PORT` start command shown above (swap `$PORT` for whatever env var the platform injects).
+The pattern is the same on most of these platforms: point them at the repo, set `OPENAI_API_KEY` (or `LLM_PROVIDER=cerebras` with `CEREBRAS_API_KEY`) and `PARALLEL_API_KEY` as environment variables/secrets, and use the `streamlit run ... --server.port $PORT` start command shown above (swap `$PORT` for whatever env var the platform injects).
 
 Paid tiers on these platforms (commonly $5–$25/mo for a small instance) generally keep the app "always on" with no cold start. Free tiers exist on most of them too, but come with a tradeoff — see below.
 
