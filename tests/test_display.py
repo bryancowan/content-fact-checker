@@ -37,3 +37,19 @@ def test_is_idempotent():
     """An already-escaped dollar must not gain a second backslash."""
     once = escape_dollars("costs $5 and $25")
     assert escape_dollars(once) == once
+
+
+def test_escapes_a_dollar_after_paired_backslashes():
+    r"""``\\`` is a literal backslash in Markdown, so the ``$`` after it is still live."""
+    assert escape_dollars("path \\\\$5") == "path \\\\\\$5"
+
+
+def test_leaves_a_dollar_escaped_by_an_odd_backslash_count_alone():
+    assert escape_dollars("costs \\$5") == "costs \\$5"
+    assert escape_dollars("x \\\\\\$5") == "x \\\\\\$5"
+
+
+@pytest.mark.parametrize("backslashes", range(0, 7))
+def test_idempotent_for_any_backslash_count(backslashes):
+    once = escape_dollars("a" + "\\" * backslashes + "$5")
+    assert escape_dollars(once) == once
