@@ -50,4 +50,56 @@ def test_minimum_is_configurable_so_zero_can_be_allowed(env):
 
 def test_rate_limit_default_is_positive():
     """Guards the specific regression: a non-positive rate limit crashes RateLimiter."""
-    assert config.CEREBRAS_REQUESTS_PER_MIN >= 1
+    assert config.LLM_REQUESTS_PER_MIN >= 1
+
+
+def test_legacy_key_is_used_when_the_new_key_is_unset(env):
+    env.delenv("NEW_SETTING", raising=False)
+    env.setenv("OLD_SETTING", "7")
+    assert config._get_int("NEW_SETTING", 300, legacy_key="OLD_SETTING") == 7
+
+
+def test_new_key_wins_over_the_legacy_key(env):
+    env.setenv("NEW_SETTING", "9")
+    env.setenv("OLD_SETTING", "7")
+    assert config._get_int("NEW_SETTING", 300, legacy_key="OLD_SETTING") == 9
+
+
+# --- provider and model selection -------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [(None, "openai"), ("", "openai"), ("openai", "openai"), (" Cerebras ", "cerebras")],
+)
+def test_resolve_provider(raw, expected):
+    assert config.resolve_provider(raw) == expected
+
+
+def test_unknown_provider_raises():
+    with pytest.raises(ValueError, match="Unsupported LLM_PROVIDER"):
+        config.resolve_provider("anthropic")
+
+
+@pytest.fixture
+def model_env(monkeypatch):
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    monkeypatch.delenv("CEREBRAS_MODEL_NAME", raising=False)
+    return monkeypatch
+
+
+def test_default_models(model_env):
+    assert config.resolve_model_name("openai") == "gpt-6-luna"
+    assert config.resolve_model_name("cerebras") == "qwen-3.8-27b"
+
+
+def test_llm_model_name_overrides_the_default(model_env):
+    model_env.setenv("LLM_MODEL_NAME", "gpt-6-sol")
+    assert config.resolve_model_name("openai") == "gpt-6-sol"
+
+
+def test_legacy_cerebras_model_name_applies_to_cerebras_only(model_env):
+    """render.yaml pins CEREBRAS_MODEL_NAME; it must not hold the OpenAI default back."""
+    model_env.setenv("CEREBRAS_MODEL_NAME", "qwen-future")
+    assert config.resolve_model_name("cerebras") == "qwen-future"
+    assert config.resolve_model_name("openai") == "gpt-6-luna"

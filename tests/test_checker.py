@@ -26,7 +26,7 @@ def test_fact_check_single_claim_normal_verdict(monkeypatch):
     _stub_search(monkeypatch, ["https://a.example"])
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps(
             {"verdict": "true", "reason": "because", "top_sources": ["https://a.example"]}
         ),
@@ -43,7 +43,7 @@ def test_fact_check_single_claim_invalid_verdict_falls_back_to_uncertain(monkeyp
     _stub_search(monkeypatch)
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps({"verdict": "maybe", "reason": "unclear", "top_sources": []}),
     )
 
@@ -54,7 +54,7 @@ def test_fact_check_single_claim_invalid_verdict_falls_back_to_uncertain(monkeyp
 
 def test_fact_check_single_claim_malformed_json_falls_back(monkeypatch):
     _stub_search(monkeypatch)
-    monkeypatch.setattr(checker, "call_cerebras_chat", lambda **kwargs: "not json at all")
+    monkeypatch.setattr(checker, "call_llm_chat", lambda **kwargs: "not json at all")
 
     result = checker.fact_check_single_claim("some claim")
 
@@ -67,7 +67,7 @@ def test_fact_check_single_claim_truncates_sources_to_five(monkeypatch):
     many_sources = [f"https://example.com/{i}" for i in range(10)]
     _stub_search(monkeypatch, many_sources)
     fake_payload = {"verdict": "true", "reason": "x", "top_sources": many_sources}
-    monkeypatch.setattr(checker, "call_cerebras_chat", lambda **kwargs: json.dumps(fake_payload))
+    monkeypatch.setattr(checker, "call_llm_chat", lambda **kwargs: json.dumps(fake_payload))
 
     result = checker.fact_check_single_claim("some claim")
 
@@ -78,7 +78,7 @@ def test_fact_check_single_claim_coerces_non_list_top_sources(monkeypatch):
     _stub_search(monkeypatch, ["https://single.example"])
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps(
             {"verdict": "false", "reason": "x", "top_sources": "https://single.example"}
         ),
@@ -97,7 +97,7 @@ def test_fact_check_single_claim_drops_sources_not_in_evidence(monkeypatch):
     _stub_search(monkeypatch, ["https://real.example"])
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps(
             {
                 "verdict": "true",
@@ -116,7 +116,7 @@ def test_fact_check_single_claim_drops_non_http_sources(monkeypatch):
     _stub_search(monkeypatch, ["javascript:alert(1)"])
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps(
             {"verdict": "true", "reason": "x", "top_sources": ["javascript:alert(1)"]}
         ),
@@ -143,7 +143,7 @@ def test_fact_check_text_calls_on_progress_for_each_claim(monkeypatch):
     _stub_search(monkeypatch)
     monkeypatch.setattr(
         checker,
-        "call_cerebras_chat",
+        "call_llm_chat",
         lambda **kwargs: json.dumps({"verdict": "true", "reason": "x", "top_sources": []}),
     )
 

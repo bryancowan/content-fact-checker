@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .claims import extract_claims_from_image, extract_claims_from_text, extract_claims_from_url
-from .llm import call_cerebras_chat
+from .llm import call_llm_chat
 from .search import build_evidence_context, search_web
 
 _VERDICT_RESPONSE_FORMAT = {
@@ -80,7 +80,7 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
     {evidence_context}
     """)
 
-    raw = call_cerebras_chat(
+    raw = call_llm_chat(
         user_content=user_prompt,
         system_content=system_prompt,
         response_format=_VERDICT_RESPONSE_FORMAT,

@@ -46,7 +46,7 @@ def test_extract_claims_from_text_uses_structured_output(monkeypatch):
         captured.update(kwargs)
         return '{"claims": ["Claim one"]}'
 
-    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+    monkeypatch.setattr(claims, "call_llm_chat", fake_call)
 
     result = claims.extract_claims_from_text("some article text", max_claims=5)
 
@@ -76,7 +76,7 @@ def test_extract_claims_from_image_sends_data_uri_and_structured_output(monkeypa
         captured.update(kwargs)
         return '{"claims": ["Claim from image"]}'
 
-    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+    monkeypatch.setattr(claims, "call_llm_chat", fake_call)
 
     result = claims.extract_claims_from_image(b"\x89PNG", "image/png", max_claims=3)
 
@@ -93,7 +93,7 @@ def test_long_text_is_truncated_before_the_model_call(monkeypatch):
         captured.update(kwargs)
         return json.dumps({"claims": ["c"]})
 
-    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+    monkeypatch.setattr(claims, "call_llm_chat", fake_call)
 
     claims.extract_claims_from_text("x" * (config.MAX_ARTICLE_CHARS * 2))
 
@@ -111,7 +111,7 @@ def test_short_text_is_not_truncated(monkeypatch):
         captured.update(kwargs)
         return json.dumps({"claims": ["c"]})
 
-    monkeypatch.setattr(claims, "call_cerebras_chat", fake_call)
+    monkeypatch.setattr(claims, "call_llm_chat", fake_call)
 
     claims.extract_claims_from_text("a short article")
 

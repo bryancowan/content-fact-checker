@@ -17,9 +17,13 @@ on 2026-09-03 and names `qwen-3.8-27b` as its recommended replacement
 | Max output tokens | 32K | 40K |
 | Requests/min | 5 | 300 |
 | Tokens/min (uncached) | 30K | 150K |
-| Tokens/min (total) | 90K | 450K |
+| Tokens/min (total) | 90K | 750K |
 | Tokens/day | 1M | no daily cap |
 | Images per request | 2 | 10 |
+
+Developer-tier total tokens/min was raised from 450K to 750K on 2026-09-22
+(https://inference-docs.cerebras.ai/support/change-log). The uncached limit is
+unchanged at 150K. The other figures above are as retrieved 2026-09-07.
 
 Throughput ~1500 tokens/second. Pricing: $0.99 / M input tokens,
 $1.49 / M output tokens.

@@ -1,4 +1,5 @@
 cerebras_cloud_sdk==1.91.0
+openai==3.28.0
 parallel-web==1.2.0
 python-dotenv==1.2.2
 requests==2.34.2

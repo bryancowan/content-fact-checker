@@ -10,7 +10,7 @@ from .config import (
     MAX_ARTICLE_CHARS,
     MAX_IMAGE_BYTES,
 )
-from .llm import call_cerebras_chat
+from .llm import call_llm_chat
 from .url_guard import UnsafeURLError, validate_public_url
 
 # Cap how much of a response we read, to avoid memory abuse from a hostile or
@@ -70,7 +70,7 @@ def extract_claims_from_text(text: str, max_claims: int = 8) -> list[str]:
 
     user_prompt = f"Text:\n\n{text}\n\nExtract up to {max_claims} factual claims."
 
-    raw = call_cerebras_chat(
+    raw = call_llm_chat(
         user_content=user_prompt,
         system_content=system_prompt,
         response_format=_CLAIMS_RESPONSE_FORMAT,
@@ -115,7 +115,7 @@ def extract_claims_from_image(image_bytes: bytes, mime_type: str, max_claims: in
 
     user_prompt = f"Extract up to {max_claims} factual claims from this image."
 
-    raw = call_cerebras_chat(
+    raw = call_llm_chat(
         user_content=user_prompt,
         system_content=system_prompt,
         image_data_urls=[data_uri],

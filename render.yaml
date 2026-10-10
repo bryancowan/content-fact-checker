@@ -6,10 +6,15 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
     envVars:
-      - key: CEREBRAS_API_KEY
+      - key: OPENAI_API_KEY
         sync: false
       - key: PARALLEL_API_KEY
         sync: false
-      # Lets a deprecated model be swapped from the Render dashboard without a deploy.
-      - key: CEREBRAS_MODEL_NAME
-        value: qwen-3.8-27b
+      # "openai" or "cerebras". Switching is a dashboard change and a restart.
+      - key: LLM_PROVIDER
+        value: openai
+      # Only needed to switch LLM_PROVIDER to cerebras.
+      - key: CEREBRAS_API_KEY
+        sync: false
+      # Defaults to gpt-6-luna. Set LLM_MODEL_NAME from the Render dashboard to
+      # swap a deprecated model without a deploy.
