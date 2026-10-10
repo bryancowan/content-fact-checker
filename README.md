@@ -24,6 +24,8 @@ Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cook
 
 **Check Image tab** — upload a screenshot, chart, or infographic to analyze:
 
+![Check Image](assets/web-check-image.png)
+
 **Progress** — each claim is checked in real time:
 
 ![Checking in progress](assets/web-check-url-progress.png)
