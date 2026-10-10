@@ -46,6 +46,7 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 - `src/fact_checker/rate_limiter.py` — sliding-window rate limiter; defaults to 300 req/min (set `LLM_REQUESTS_PER_MIN=5` on the Cerebras free trial)
 - `src/fact_checker/llm.py` — single `call_llm_chat()` function; accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
 - `src/fact_checker/search.py` — `search_web()` wraps Parallel API; `build_evidence_context()` formats results for the LLM prompt (unaffected by image support — evidence search is always text-based)
+- `src/fact_checker/display.py` — `escape_dollars()`; Streamlit renders `$...$` as LaTeX, so every model- or user-supplied string passed to `st.markdown`/`st.caption` in `web_app.py` goes through it (prices otherwise lose their dollar signs). `st.text` and the CLI don't need it.
 - `src/fact_checker/claims.py` — LLM-based claim extraction from text, URL, or image (PNG/JPEG only)
 - `src/fact_checker/checker.py` — `fact_check_text()` / `fact_check_url()` / `fact_check_image()` orchestrate the full pipeline; `ClaimResult` dataclass holds verdict/reason/sources
 

@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 import streamlit as st
 
 from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_check_url
+from fact_checker.display import escape_dollars
 
 st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
 
@@ -119,16 +120,16 @@ def display_results(results: list[ClaimResult]):
         with st.container():
             col1, col2 = st.columns([3, 1])
             with col1:
-                st.markdown(f"**Claim {i}:** {r.claim}")
+                st.markdown(f"**Claim {i}:** {escape_dollars(r.claim)}")
             with col2:
                 st.badge(style["label"], color=style["color"], icon=style["icon"])
 
-            st.markdown(f"*{r.reason}*")
+            st.markdown(f"*{escape_dollars(r.reason)}*")
 
             if r.sources:
                 with st.expander("View sources"):
                     for s in r.sources:
-                        st.markdown(f"- {s}")
+                        st.markdown(f"- {escape_dollars(s)}")
             st.markdown("---")
 
 
@@ -261,12 +262,12 @@ with st.sidebar:
                 kind_labels = {"text": "Text", "url": "URL", "image": "Image"}
                 kind = kind_labels.get(entry["input_type"], "Text")
                 preview = entry["input_preview"]
-                st.caption(f"**{kind}:** {preview}")
+                st.caption(f"**{kind}:** {escape_dollars(preview)}")
                 for r in entry["results"]:
                     style = VERDICT_STYLES.get(r.verdict, VERDICT_STYLES["uncertain"])
                     badge = f":{style['color']}-badge[{style['icon']} {style['label']}]"
-                    st.markdown(f"{badge} {r.claim}")
-                    st.markdown(f"*{r.reason}*")
+                    st.markdown(f"{badge} {escape_dollars(r.claim)}")
+                    st.markdown(f"*{escape_dollars(r.reason)}*")
 
         if st.button("Clear History"):
             st.session_state["history"] = []
