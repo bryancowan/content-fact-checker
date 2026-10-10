@@ -144,14 +144,20 @@ def test_rate_limiter_is_acquired_before_calling(monkeypatch):
 
 
 def test_default_model_is_gpt_6_luna(monkeypatch):
-    """Pin the model, so a swap can't pass a green suite while being wrong."""
+    """Pin the model, so a swap can't pass a green suite while being wrong.
+
+    Resolved with the overrides cleared so a LLM_MODEL_NAME set in the shell or
+    CI environment can't fail the test; llm binds the name at import time.
+    """
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    monkeypatch.delenv("CEREBRAS_MODEL_NAME", raising=False)
+    monkeypatch.setattr(llm, "LLM_MODEL_NAME", config.resolve_model_name("openai"))
     fake_client = _install_fake_client(monkeypatch)
 
     llm.call_llm_chat(user_content="hi")
 
     [call] = fake_client.chat.completions.calls
     assert call["model"] == "gpt-6-luna"
-    assert call["model"] == config.LLM_MODEL_NAME
 
 
 def test_uses_max_completion_tokens_and_not_max_tokens(monkeypatch):
