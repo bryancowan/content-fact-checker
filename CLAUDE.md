@@ -11,8 +11,8 @@ pip install -r requirements.txt
 # Run the Streamlit app locally
 streamlit run web_app.py
 
-# A/B test models on the verdict step (live API calls; costs money, needs all three keys
-# for the providers you name). Writes a report to evals/results/.
+# A/B test models on the verdict step (live API calls; costs money). Needs PARALLEL_API_KEY
+# plus the key for each provider you name. Writes a report to evals/results/.
 python evals/run_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl --repeats 3
 
 # Deploy to Render (config in render.yaml)

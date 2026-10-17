@@ -237,7 +237,12 @@ def test_openrouter_sends_reasoning_object_and_sampling_params(monkeypatch):
     llm.call_llm_chat(user_content="hi")
 
     [call] = fake_client.chat.completions.calls
-    assert call["extra_body"] == {"reasoning": {"effort": "high"}}
+    assert call["extra_body"] == {
+        "reasoning": {"effort": "high"},
+        # Without this OpenRouter may route to a backend that ignores the JSON
+        # schema, which would only show up later as a parse failure.
+        "provider": {"require_parameters": True},
+    }
     assert call["temperature"] == config.DEFAULT_TEMPERATURE
     assert call["top_p"] == config.DEFAULT_TOP_P
     assert "reasoning_effort" not in call
@@ -268,7 +273,7 @@ def test_override_switches_provider_model_and_effort_for_calls_inside_it(monkeyp
 
     inside, outside = fake_client.chat.completions.calls
     assert inside["model"] == "reflection/beam-1.0-501b-a23b"
-    assert inside["extra_body"] == {"reasoning": {"effort": "low"}}
+    assert inside["extra_body"]["reasoning"] == {"effort": "low"}
     assert outside["model"] != "reflection/beam-1.0-501b-a23b"
     assert fake_client.requested_providers == ["openrouter", "openai"]
 
@@ -365,6 +370,16 @@ def test_sdk_errors_become_llm_call_errors(monkeypatch, provider, sdk, label, er
         llm.call_llm_chat(user_content="hi")
 
     assert label in str(excinfo.value)
+
+
+def test_a_200_response_without_choices_is_an_llm_call_error(monkeypatch):
+    """OpenRouter can return an error body with HTTP 200; the SDK parses it as no choices."""
+    fake_client = _install_fake_client(monkeypatch, provider="openrouter")
+    error_body = types.SimpleNamespace(choices=None, error={"message": "Provider returned error"})
+    monkeypatch.setattr(fake_client.chat.completions, "create", lambda **kwargs: error_body)
+
+    with pytest.raises(llm.LLMCallError, match="OpenRouter returned no completion.*Provider"):
+        llm.call_llm_chat(user_content="hi")
 
 
 # --- image limits ------------------------------------------------------------

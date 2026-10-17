@@ -131,10 +131,17 @@ def _reasoning_and_sampling_kwargs(
     extra_body. It normalises reasoning to message.reasoning, so content stays
     pure JSON without a reasoning_format, and it drops sampling parameters a
     routed model doesn't support rather than erroring, so those are always sent.
+    The same is true of response_format and reasoning, which the verdict parsing
+    depends on, so require_parameters restricts routing to backends that honour
+    everything sent; the alternative is an ignored schema that surfaces only as a
+    parse failure.
     """
     if provider == "openrouter":
         return {
-            "extra_body": {"reasoning": {"effort": reasoning_effort}},
+            "extra_body": {
+                "reasoning": {"effort": reasoning_effort},
+                "provider": {"require_parameters": True},
+            },
             "temperature": temperature,
             "top_p": top_p,
         }
@@ -245,6 +252,13 @@ def call_llm_chat_with_metrics(
         raise LLMCallError(f"{label} API error: {exc}") from exc
 
     latency_s = time.perf_counter() - started
+
+    # OpenRouter can answer HTTP 200 with an error body and no choices. The SDK
+    # parses that without complaint (strict response validation is off), so
+    # indexing choices below would raise a bare TypeError.
+    if not getattr(resp, "choices", None):
+        error = getattr(resp, "error", None)
+        raise LLMCallError(f"{label} returned no completion" + (f": {error}" if error else "."))
 
     message = resp.choices[0].message
     # Structured outputs can come back as a refusal with content=None; naming it

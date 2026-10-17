@@ -31,6 +31,7 @@ from evals.scoring import (  # noqa: E402
     summarize,
 )
 from fact_checker.checker import judge_claim  # noqa: E402
+from fact_checker.config import SUPPORTED_PROVIDERS  # noqa: E402
 from fact_checker.llm import LLMCallError, llm_override, record_llm_calls  # noqa: E402
 from fact_checker.search import search_web  # noqa: E402
 
@@ -54,8 +55,8 @@ def load_claims(path: Path, limit: int | None) -> list[dict]:
 
 
 # Must match the search in checker.fact_check_single_claim, so the eval judges the
-# evidence the app would have shown. The mode is in the cache key, so changing it
-# there and here can't serve stale results.
+# evidence the app would have shown. Both settings are in the cache key, so changing
+# either here can't serve stale results.
 SEARCH_NUM = 6
 SEARCH_MODE = "fast"
 
@@ -63,7 +64,7 @@ SEARCH_MODE = "fast"
 def get_evidence(claims: list[dict]) -> dict[str, list[dict]]:
     """Search results per claim id, from the cache where present."""
     cache = json.loads(EVIDENCE_CACHE.read_text()) if EVIDENCE_CACHE.exists() else {}
-    keys = {c["id"]: f"{SEARCH_MODE}|{c['id']}|{c['claim']}" for c in claims}
+    keys = {c["id"]: f"{SEARCH_MODE}|{SEARCH_NUM}|{c['id']}|{c['claim']}" for c in claims}
     for claim in claims:
         if keys[claim["id"]] not in cache:
             print(f"  searching {claim['id']}: {claim['claim']}")
@@ -110,8 +111,18 @@ def main() -> None:
     args = parser.parse_args()
 
     specs = [s.strip() for s in args.models.split(",") if s.strip()]
+    # Checked before any paid call: a typo found mid-run would abort after the
+    # earlier models had been paid for, with no report written.
     for spec in specs:
-        parse_model_spec(spec)
+        try:
+            provider, _ = parse_model_spec(spec)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if provider not in SUPPORTED_PROVIDERS:
+            parser.error(
+                f"Unknown provider {provider!r} in {spec!r}; "
+                f"expected one of {', '.join(SUPPORTED_PROVIDERS)}."
+            )
     claims = load_claims(args.claims, args.limit)
     pricing = json.loads(args.pricing.read_text()) if args.pricing.exists() else {}
 
