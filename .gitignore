@@ -5,3 +5,4 @@ __pycache__/
 # Track the theme in .streamlit/config.toml; keep secrets out.
 .streamlit/secrets.toml
 .DS_Store
+evals/results/evidence-cache.json

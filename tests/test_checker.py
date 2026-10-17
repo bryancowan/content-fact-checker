@@ -154,3 +154,23 @@ def test_fact_check_text_calls_on_progress_for_each_claim(monkeypatch):
 
     assert len(results) == 2
     assert progress_calls == [(0, 2), (1, 2)]
+
+
+def test_judge_claim_flags_unparseable_output_instead_of_hiding_it(monkeypatch):
+    """The "uncertain" fallback looks like a real verdict; evals need to tell them apart."""
+    monkeypatch.setattr(checker, "call_llm_chat", lambda **kwargs: "not json")
+
+    result = checker.judge_claim("some claim", [])
+
+    assert result.verdict == "uncertain"
+    assert result.parse_failed is True
+
+
+def test_judge_claim_does_not_flag_valid_output(monkeypatch):
+    monkeypatch.setattr(
+        checker,
+        "call_llm_chat",
+        lambda **kwargs: json.dumps({"verdict": "true", "reason": "r", "top_sources": []}),
+    )
+
+    assert checker.judge_claim("some claim", []).parse_failed is False

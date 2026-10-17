@@ -70,7 +70,13 @@ def test_new_key_wins_over_the_legacy_key(env):
 
 @pytest.mark.parametrize(
     ("raw", "expected"),
-    [(None, "openai"), ("", "openai"), ("openai", "openai"), (" Cerebras ", "cerebras")],
+    [
+        (None, "openai"),
+        ("", "openai"),
+        ("openai", "openai"),
+        (" Cerebras ", "cerebras"),
+        ("OpenRouter", "openrouter"),
+    ],
 )
 def test_resolve_provider(raw, expected):
     assert config.resolve_provider(raw) == expected
@@ -91,6 +97,7 @@ def model_env(monkeypatch):
 def test_default_models(model_env):
     assert config.resolve_model_name("openai") == "gpt-6-luna"
     assert config.resolve_model_name("cerebras") == "qwen-3.8-27b"
+    assert config.resolve_model_name("openrouter") == "nvidia/nemotron-3.5-super-vl"
 
 
 def test_llm_model_name_overrides_the_default(model_env):
@@ -103,3 +110,12 @@ def test_legacy_cerebras_model_name_applies_to_cerebras_only(model_env):
     model_env.setenv("CEREBRAS_MODEL_NAME", "qwen-future")
     assert config.resolve_model_name("cerebras") == "qwen-future"
     assert config.resolve_model_name("openai") == "gpt-6-luna"
+
+
+def test_reasoning_effort_is_resolved_per_provider(monkeypatch):
+    for env_name in config.REASONING_EFFORT_ENV.values():
+        monkeypatch.delenv(env_name, raising=False)
+    monkeypatch.setenv("OPENROUTER_REASONING_EFFORT", "low")
+
+    assert config.resolve_reasoning_effort("openrouter") == "low"
+    assert config.resolve_reasoning_effort("openai") == "high"

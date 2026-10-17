@@ -1,0 +1,8 @@
+{
+  "_comment": "USD per 1M tokens. Used only when the provider reports no cost (OpenRouter reports usage.cost, so it never needs an entry). Reasoning tokens are billed as completion tokens. null = unknown, and cost shows as n/a. Cached input is not discounted here, so cost is slightly overstated when the provider caches the prompt.",
+  "openai:gpt-6-luna": {
+    "input_per_m": 0.10,
+    "output_per_m": 0.50,
+    "_source": "https://developers.openai.com/api/docs/pricing, standard rates, checked 2026-10-17. Requests over 272K input tokens cost more; ours are about 2K."
+  }
+}

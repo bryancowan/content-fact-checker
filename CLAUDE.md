@@ -11,6 +11,10 @@ pip install -r requirements.txt
 # Run the Streamlit app locally
 streamlit run web_app.py
 
+# A/B test models on the verdict step (live API calls; costs money, needs all three keys
+# for the providers you name). Writes a report to evals/results/.
+python evals/run_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl --repeats 3
+
 # Deploy to Render (config in render.yaml)
 # Uses: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
 ```
@@ -21,8 +25,10 @@ Copy `.env.example` to `.env` and populate the keys:
 - `OPENAI_API_KEY` — for LLM inference (`gpt-6-luna` by default)
 - `PARALLEL_API_KEY` — for web search
 - `CEREBRAS_API_KEY` — only if `LLM_PROVIDER=cerebras` (`qwen-3.8-27b` by default)
+- `OPENROUTER_API_KEY` — only if `LLM_PROVIDER=openrouter` (`nvidia/nemotron-3.5-super-vl` by default;
+  set `LLM_MODEL_NAME` to any OpenRouter `provider/model` slug)
 
-`LLM_PROVIDER` (`openai` default, or `cerebras`) and `LLM_MODEL_NAME` select the provider and
+`LLM_PROVIDER` (`openai` default, `cerebras` or `openrouter`) and `LLM_MODEL_NAME` select the provider and
 model. Switching is config-only; there is no in-app selector.
 
 On Streamlit Cloud, secrets are read via `st.secrets` (takes priority over `.env`). An optional `APP_PASSWORD` secret gates access behind a login screen.
@@ -42,9 +48,9 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 
 **Key modules:**
 - `src/fact_checker/config.py` — API keys, provider (`LLM_PROVIDER`) and model name (`gpt-6-luna` / `qwen-3.8-27b`), reasoning/token settings, rate limit, retry and image constraints. Most values are overridable via env vars or Streamlit secrets, so a model deprecation doesn't require a code change. Settings renamed from `CEREBRAS_*` to `LLM_*` still read the old name as a fallback.
-- `src/fact_checker/clients.py` — lazy singleton clients for OpenAI, Cerebras and Parallel APIs; `get_llm_client()` picks the chat client for the configured provider
+- `src/fact_checker/clients.py` — lazy singleton clients for OpenAI, Cerebras, OpenRouter (the OpenAI SDK on OpenRouter's base URL) and Parallel APIs; `get_llm_client()` picks the chat client for the configured provider
 - `src/fact_checker/rate_limiter.py` — sliding-window rate limiter; defaults to 300 req/min (set `LLM_REQUESTS_PER_MIN=5` on the Cerebras free trial)
-- `src/fact_checker/llm.py` — single `call_llm_chat()` function; accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
+- `src/fact_checker/llm.py` — `call_llm_chat()` (returns the text) over `call_llm_chat_with_metrics()` (adds latency, tokens, cost); `llm_override()` / `record_llm_calls()` context managers switch provider/model and collect metrics for the calls inside them without threading parameters through `claims.py`/`checker.py` (used by `evals/`); accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
 - `src/fact_checker/search.py` — `search_web()` wraps Parallel API; `build_evidence_context()` formats results for the LLM prompt (unaffected by image support — evidence search is always text-based)
 - `src/fact_checker/display.py` — `escape_dollars()`; Streamlit renders `$...$` as LaTeX, so every model- or user-supplied string passed to `st.markdown`/`st.caption` in `web_app.py` goes through it (prices otherwise lose their dollar signs). `st.text` and the CLI don't need it.
 - `src/fact_checker/claims.py` — LLM-based claim extraction from text, URL, or image (PNG/JPEG only)
@@ -85,6 +91,10 @@ one place that handles it:
   `reasoning_effort="none"`, and `reasoning_format` is rejected outright, so neither is
   sent at the default effort. `gpt-6-luna`'s own default effort is `medium`; this app
   pins `high`.
+- **OpenRouter**: effort goes in `extra_body={"reasoning": {"effort": ...}}` (OpenRouter
+  documents no top-level `reasoning_effort`), `temperature`/`top_p` are always sent, and
+  `reasoning_format` is not. OpenRouter returns the trace in `message.reasoning`, so
+  `content` stays pure JSON. Responses carry `usage.cost` without any opt-in parameter.
 - **Cerebras (`qwen-3.8-27b`)**: sends `temperature`, `top_p`, and `reasoning_format`
   pinned to `"parsed"`, so the reasoning trace lands in `message.reasoning` and
   `message.content` stays pure JSON for the structured-output parsers.
@@ -106,6 +116,7 @@ every PR. The suite is offline and needs no secrets.
 - Parallel (web search) — https://status.parallel.ai
 - OpenAI (inference) — https://status.openai.com
 - Cerebras (inference, when `LLM_PROVIDER=cerebras`) — https://status.cerebras.ai
+- OpenRouter (inference, when `LLM_PROVIDER=openrouter`) — https://status.openrouter.ai
 
 Provider incidents can surface as errors that point at the wrong thing. A Parallel outage
 can return `401 {"code":16,"message":"No API key provided (C.0)"}` for requests that carry
