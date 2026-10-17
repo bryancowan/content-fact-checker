@@ -112,10 +112,55 @@ def test_render_markdown_has_a_row_per_model():
         "openai:a": scoring.summarize([_attempt("true", "true", cost_usd=0.001, latency_s=2.0)]),
         "openrouter:b": scoring.summarize([_attempt("true", "false")]),
     }
-    meta = {"date": "2026-10-17", "claims": 1, "label_counts": "1 true", "repeats": 1}
+    meta = {
+        "date": "2026-10-17",
+        "claims": 1,
+        "label_counts": "1 true",
+        "claims_file": "claims.jsonl",
+        "repeats": 1,
+    }
 
     report = scoring.render_markdown(summaries, meta)
 
     assert "| `openai:a` | 100.0% (1/1)" in report
     assert "| `openrouter:b` | 0.0% (0/1)" in report
     assert "n/a" in report  # no cost or latency for the second model
+
+
+def test_category_accuracy_is_tallied_and_reported():
+    attempts = [
+        _attempt("true", "true", category="numeric"),
+        _attempt("true", "false", category="numeric"),
+        _attempt("false", "false", category="compound"),
+        _attempt("false", "false"),  # a claims file without categories
+    ]
+
+    summary = scoring.summarize(attempts)
+
+    assert summary["categories"] == {
+        "numeric": {"attempts": 2, "correct": 1},
+        "compound": {"attempts": 1, "correct": 1},
+    }
+    meta = {
+        "date": "2026-10-17",
+        "claims": 4,
+        "label_counts": "2 true",
+        "claims_file": "claims-hard.jsonl",
+        "repeats": 1,
+    }
+    report = scoring.render_markdown({"openai:a": summary}, meta)
+    assert "## Accuracy by category" in report
+    assert "50.0% (1/2)" in report
+
+
+def test_report_omits_the_category_table_when_claims_have_none():
+    summary = scoring.summarize([_attempt("true", "true")])
+    meta = {
+        "date": "2026-10-17",
+        "claims": 1,
+        "label_counts": "1 true",
+        "claims_file": "claims.jsonl",
+        "repeats": 1,
+    }
+
+    assert "Accuracy by category" not in scoring.render_markdown({"m": summary}, meta)

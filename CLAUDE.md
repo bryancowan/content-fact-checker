@@ -14,6 +14,11 @@ streamlit run web_app.py
 # A/B test models on the verdict step (live API calls; costs money). Needs PARALLEL_API_KEY
 # plus the key for each provider you name. Writes a report to evals/results/.
 python evals/run_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl --repeats 3
+# Same, on the harder set (numeric near-misses, half-true compounds, misconceptions,
+# counterintuitive truths, contested claims); the report adds accuracy by category.
+python evals/run_ab.py --models ... --claims evals/claims-hard.jsonl --name hard
+# Image claim extraction (vision models only): recall, extras, prompt-injection resistance.
+python evals/run_image_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl
 
 # Deploy to Render (config in render.yaml)
 # Uses: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
