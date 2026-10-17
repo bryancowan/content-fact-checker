@@ -1,10 +1,14 @@
+import contextlib
+import contextvars
+import time
+from dataclasses import dataclass
+
 import cerebras.cloud.sdk as cerebras_sdk
 import openai
 
 from .clients import get_llm_client
 from .config import (
     DEFAULT_MAX_COMPLETION_TOKENS,
-    DEFAULT_REASONING_EFFORT,
     DEFAULT_REASONING_FORMAT,
     DEFAULT_TEMPERATURE,
     DEFAULT_TOP_P,
@@ -13,6 +17,7 @@ from .config import (
     MAX_IMAGES_PER_REQUEST,
     MAX_TOTAL_REQUEST_BYTES,
     REASONING_EFFORT_ENV,
+    resolve_reasoning_effort,
 )
 from .rate_limiter import llm_rate_limiter
 
@@ -23,15 +28,69 @@ _RATE_LIMIT_ERRORS = (cerebras_sdk.RateLimitError, openai.RateLimitError)
 _CONNECTION_ERRORS = (cerebras_sdk.APIConnectionError, openai.APIConnectionError)
 _STATUS_ERRORS = (cerebras_sdk.APIStatusError, openai.APIStatusError)
 
-_PROVIDER_LABELS = {"openai": "OpenAI", "cerebras": "Cerebras"}
+_PROVIDER_LABELS = {"openai": "OpenAI", "cerebras": "Cerebras", "openrouter": "OpenRouter"}
 _DEPRECATION_URLS = {
     "openai": "https://platform.openai.com/docs/deprecations",
     "cerebras": "https://inference-docs.cerebras.ai/support/deprecation",
+    "openrouter": "https://openrouter.ai/models",
 }
 
 
 class LLMCallError(RuntimeError):
     """A chat completion failed, or returned nothing usable."""
+
+
+@dataclass
+class LLMResult:
+    """A completion's text plus what it cost to get.
+
+    cost_usd is only filled when the provider reports it (OpenRouter does, as
+    usage.cost); callers that need a cost for the others price the tokens.
+    """
+
+    text: str
+    provider: str
+    model: str
+    latency_s: float
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reasoning_tokens: int | None = None
+    cost_usd: float | None = None
+
+
+# Provider and model are config read at import, so an A/B run can't switch them by
+# editing env vars. llm_override() swaps them for the calls made inside the block
+# -- including the ones deep in claims.py and checker.py -- without those modules
+# having to thread a parameter through. A ContextVar keeps it per-thread/task.
+_override: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
+    "llm_override", default=None
+)
+_recorder: contextvars.ContextVar[list[LLMResult] | None] = contextvars.ContextVar(
+    "llm_recorder", default=None
+)
+
+
+@contextlib.contextmanager
+def llm_override(provider: str, model: str):
+    """Route every call_llm_chat inside the block to this provider and model."""
+    if provider not in _PROVIDER_LABELS:
+        raise ValueError(f"Unsupported provider {provider!r}.")
+    token = _override.set((provider, model))
+    try:
+        yield
+    finally:
+        _override.reset(token)
+
+
+@contextlib.contextmanager
+def record_llm_calls():
+    """Collect an LLMResult for each successful call made inside the block."""
+    calls: list[LLMResult] = []
+    token = _recorder.set(calls)
+    try:
+        yield calls
+    finally:
+        _recorder.reset(token)
 
 
 def _validate_images(image_data_urls: list[str]) -> None:
@@ -67,7 +126,25 @@ def _reasoning_and_sampling_kwargs(
 
     OpenAI's reasoning models reject temperature and top_p unless
     reasoning_effort is "none", and reject reasoning_format outright.
+
+    OpenRouter documents effort only as a "reasoning" object, so it goes in
+    extra_body. It normalises reasoning to message.reasoning, so content stays
+    pure JSON without a reasoning_format, and it drops sampling parameters a
+    routed model doesn't support rather than erroring, so those are always sent.
+    The same is true of response_format and reasoning, which the verdict parsing
+    depends on, so require_parameters restricts routing to backends that honour
+    everything sent; the alternative is an ignored schema that surfaces only as a
+    parse failure.
     """
+    if provider == "openrouter":
+        return {
+            "extra_body": {
+                "reasoning": {"effort": reasoning_effort},
+                "provider": {"require_parameters": True},
+            },
+            "temperature": temperature,
+            "top_p": top_p,
+        }
     kwargs = {"reasoning_effort": reasoning_effort}
     if provider == "cerebras":
         kwargs.update(temperature=temperature, top_p=top_p, reasoning_format=reasoning_format)
@@ -76,7 +153,21 @@ def _reasoning_and_sampling_kwargs(
     return kwargs
 
 
-def call_llm_chat(
+def _token_counts(usage) -> tuple[int | None, int | None, int | None, float | None]:
+    """Pull (prompt, completion, reasoning, cost) from a response's usage, if present."""
+    if usage is None:
+        return None, None, None, None
+    details = getattr(usage, "completion_tokens_details", None)
+    cost = getattr(usage, "cost", None)
+    return (
+        getattr(usage, "prompt_tokens", None),
+        getattr(usage, "completion_tokens", None),
+        getattr(details, "reasoning_tokens", None),
+        float(cost) if cost is not None else None,
+    )
+
+
+def call_llm_chat_with_metrics(
     user_content: str,
     system_content: str | None = None,
     image_data_urls: list[str] | None = None,
@@ -84,9 +175,9 @@ def call_llm_chat(
     temperature: float = DEFAULT_TEMPERATURE,
     top_p: float = DEFAULT_TOP_P,
     max_completion_tokens: int = DEFAULT_MAX_COMPLETION_TOKENS,
-    reasoning_effort: str = DEFAULT_REASONING_EFFORT,
+    reasoning_effort: str | None = None,
     reasoning_format: str = DEFAULT_REASONING_FORMAT,
-) -> str:
+) -> LLMResult:
     """Call the chat completion API of the configured provider and model.
 
     If image_data_urls is provided, the user message is sent as a
@@ -102,11 +193,16 @@ def call_llm_chat(
     temperature, top_p and reasoning_format are only sent where the provider
     accepts them; see _reasoning_and_sampling_kwargs.
 
-    Returns the model's response text. Raises LLMCallError if the API call
-    fails or comes back with empty content.
+    The provider and model are the configured ones unless a llm_override()
+    block is active. reasoning_effort defaults to that provider's setting.
+
+    Returns an LLMResult carrying the response text, latency and token usage.
+    Raises LLMCallError if the API call fails or comes back with empty content.
     """
-    provider = LLM_PROVIDER
+    provider, model = _override.get() or (LLM_PROVIDER, LLM_MODEL_NAME)
     label = _PROVIDER_LABELS[provider]
+    if reasoning_effort is None:
+        reasoning_effort = resolve_reasoning_effort(provider)
 
     messages = []
     if system_content:
@@ -129,9 +225,10 @@ def call_llm_chat(
     if response_format is not None:
         extra_kwargs["response_format"] = response_format
 
+    started = time.perf_counter()
     try:
-        resp = get_llm_client().chat.completions.create(
-            model=LLM_MODEL_NAME,
+        resp = get_llm_client(provider).chat.completions.create(
+            model=model,
             messages=messages,
             max_completion_tokens=max_completion_tokens,
             **extra_kwargs,
@@ -140,7 +237,7 @@ def call_llm_chat(
         # The signature of a retired model -- this app has been broken by
         # Cerebras deprecations twice already, so name the likely cause.
         raise LLMCallError(
-            f"{label} rejected model {LLM_MODEL_NAME!r}. It may have been "
+            f"{label} rejected model {model!r}. It may have been "
             f"deprecated; check {_DEPRECATION_URLS[provider]} and set "
             "LLM_MODEL_NAME to a current model."
         ) from exc
@@ -153,6 +250,15 @@ def call_llm_chat(
         raise LLMCallError(f"Could not reach the {label} API: {exc}") from exc
     except _STATUS_ERRORS as exc:
         raise LLMCallError(f"{label} API error: {exc}") from exc
+
+    latency_s = time.perf_counter() - started
+
+    # OpenRouter can answer HTTP 200 with an error body and no choices. The SDK
+    # parses that without complaint (strict response validation is off), so
+    # indexing choices below would raise a bare TypeError.
+    if not getattr(resp, "choices", None):
+        error = getattr(resp, "error", None)
+        raise LLMCallError(f"{label} returned no completion" + (f": {error}" if error else "."))
 
     message = resp.choices[0].message
     # Structured outputs can come back as a refusal with content=None; naming it
@@ -173,4 +279,45 @@ def call_llm_chat(
             f"raising LLM_MAX_COMPLETION_TOKENS or lowering "
             f"{REASONING_EFFORT_ENV[provider]}."
         )
-    return content
+
+    prompt_tokens, completion_tokens, reasoning_tokens, cost_usd = _token_counts(
+        getattr(resp, "usage", None)
+    )
+    result = LLMResult(
+        text=content,
+        provider=provider,
+        model=model,
+        latency_s=latency_s,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        reasoning_tokens=reasoning_tokens,
+        cost_usd=cost_usd,
+    )
+    if (calls := _recorder.get()) is not None:
+        calls.append(result)
+    return result
+
+
+def call_llm_chat(
+    user_content: str,
+    system_content: str | None = None,
+    image_data_urls: list[str] | None = None,
+    response_format: dict | None = None,
+    temperature: float = DEFAULT_TEMPERATURE,
+    top_p: float = DEFAULT_TOP_P,
+    max_completion_tokens: int = DEFAULT_MAX_COMPLETION_TOKENS,
+    reasoning_effort: str | None = None,
+    reasoning_format: str = DEFAULT_REASONING_FORMAT,
+) -> str:
+    """call_llm_chat_with_metrics, returning just the response text."""
+    return call_llm_chat_with_metrics(
+        user_content=user_content,
+        system_content=system_content,
+        image_data_urls=image_data_urls,
+        response_format=response_format,
+        temperature=temperature,
+        top_p=top_p,
+        max_completion_tokens=max_completion_tokens,
+        reasoning_effort=reasoning_effort,
+        reasoning_format=reasoning_format,
+    ).text

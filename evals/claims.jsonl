@@ -1,0 +1,36 @@
+{"id": "t01", "claim": "Mount Everest is about 8,849 meters tall, per the 2020 Nepal-China survey.", "label": "true"}
+{"id": "t02", "claim": "The Treaty of Versailles was signed in 1919.", "label": "true"}
+{"id": "t03", "claim": "Marie Curie won Nobel Prizes in both Physics and Chemistry.", "label": "true"}
+{"id": "t04", "claim": "The Python programming language was first released in 1991.", "label": "true"}
+{"id": "t05", "claim": "The Berlin Wall fell in November 1989.", "label": "true"}
+{"id": "t06", "claim": "Mercury is the planet closest to the Sun.", "label": "true"}
+{"id": "t07", "claim": "The Panama Canal opened in 1914.", "label": "true"}
+{"id": "t08", "claim": "Alexander Fleming discovered penicillin in 1928.", "label": "true"}
+{"id": "t09", "claim": "The Hubble Space Telescope was launched in 1990.", "label": "true"}
+{"id": "t10", "claim": "Canberra is the capital of Australia.", "label": "true"}
+{"id": "t11", "claim": "Watson and Crick's paper describing the DNA double helix was published in Nature in 1953.", "label": "true"}
+{"id": "t12", "claim": "The Magna Carta was sealed in 1215.", "label": "true"}
+{"id": "t13", "claim": "The speed of light in a vacuum is 299,792,458 metres per second.", "label": "true"}
+{"id": "t14", "claim": "Apollo 11 landed on the Moon on July 20, 1969.", "label": "true"}
+{"id": "f01", "claim": "Mount Kilimanjaro is the tallest mountain in the world.", "label": "false"}
+{"id": "f02", "claim": "The Great Wall of China is visible to the naked eye from the Moon.", "label": "false"}
+{"id": "f03", "claim": "The Eiffel Tower was completed in 1899.", "label": "false"}
+{"id": "f04", "claim": "Humans use only 10 percent of their brains.", "label": "false"}
+{"id": "f05", "claim": "The Titanic sank in 1915.", "label": "false"}
+{"id": "f06", "claim": "Sydney is the capital of Australia.", "label": "false"}
+{"id": "f07", "claim": "Albert Einstein won the Nobel Prize in Physics for his theory of relativity.", "label": "false"}
+{"id": "f08", "claim": "The United States Declaration of Independence was adopted in 1778.", "label": "false"}
+{"id": "f09", "claim": "Lightning never strikes the same place twice.", "label": "false"}
+{"id": "f10", "claim": "Water boils at 90 degrees Celsius at sea level.", "label": "false"}
+{"id": "f11", "claim": "The Berlin Wall was built in 1951.", "label": "false"}
+{"id": "f12", "claim": "Goldfish have a three-second memory.", "label": "false"}
+{"id": "f13", "claim": "The first iPhone was released in 2005.", "label": "false"}
+{"id": "f14", "claim": "Mars has three moons.", "label": "false"}
+{"id": "u01", "claim": "The Nile is the longest river in the world.", "label": "uncertain"}
+{"id": "u02", "claim": "William Shakespeare wrote exactly 37 plays.", "label": "uncertain"}
+{"id": "u03", "claim": "The Iliad and the Odyssey were both composed by a single poet named Homer.", "label": "uncertain"}
+{"id": "u04", "claim": "King Arthur was a real historical person.", "label": "uncertain"}
+{"id": "u05", "claim": "Marco Polo actually travelled to China.", "label": "uncertain"}
+{"id": "u06", "claim": "Richard III ordered the murder of the Princes in the Tower.", "label": "uncertain"}
+{"id": "u07", "claim": "The Voynich manuscript is a medieval hoax.", "label": "uncertain"}
+{"id": "u08", "claim": "Amelia Earhart's remains were found on Nikumaroro island.", "label": "uncertain"}

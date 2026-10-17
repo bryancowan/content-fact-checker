@@ -43,10 +43,11 @@ def _get_int(key: str, default: int, minimum: int = 1, legacy_key: str | None = 
 
 CEREBRAS_API_KEY = _get_secret("CEREBRAS_API_KEY")
 OPENAI_API_KEY = _get_secret("OPENAI_API_KEY")
+OPENROUTER_API_KEY = _get_secret("OPENROUTER_API_KEY")
 PARALLEL_API_KEY = _get_secret("PARALLEL_API_KEY")
 
 # Which LLM provider serves chat completions. Switching is a config change only.
-SUPPORTED_PROVIDERS = ("openai", "cerebras")
+SUPPORTED_PROVIDERS = ("openai", "cerebras", "openrouter")
 DEFAULT_PROVIDER = "openai"
 
 # Overridable so a future deprecation is a config change, not a code change --
@@ -55,14 +56,18 @@ DEFAULT_PROVIDER = "openai"
 _DEFAULT_MODELS = {
     "openai": "gpt-6-luna",
     "cerebras": "qwen-3.8-27b",
+    # OpenRouter serves hundreds of models, so there is no natural default; this
+    # one is the first open model we evaluated. Set LLM_MODEL_NAME to pick another.
+    "openrouter": "nvidia/nemotron-3.5-super-vl",
 }
 
-# Both providers get "high": the Cerebras default already changed once between
+# Every provider gets "high": the Cerebras default already changed once between
 # models (gemma-4-31b defaulted to "none"), and gpt-6-luna's own default is
 # "medium", so it is pinned explicitly rather than inherited.
 REASONING_EFFORT_ENV = {
     "openai": "OPENAI_REASONING_EFFORT",
     "cerebras": "CEREBRAS_REASONING_EFFORT",
+    "openrouter": "OPENROUTER_REASONING_EFFORT",
 }
 _DEFAULT_REASONING_EFFORT = "high"
 
@@ -105,12 +110,16 @@ DEFAULT_MAX_COMPLETION_TOKENS = _get_int(
     "LLM_MAX_COMPLETION_TOKENS", 16384, legacy_key="CEREBRAS_MAX_COMPLETION_TOKENS"
 )
 
-DEFAULT_REASONING_EFFORT = (
-    _get_secret(REASONING_EFFORT_ENV[LLM_PROVIDER]) or _DEFAULT_REASONING_EFFORT
-)
+
+def resolve_reasoning_effort(provider: str) -> str:
+    return _get_secret(REASONING_EFFORT_ENV[provider]) or _DEFAULT_REASONING_EFFORT
+
+
+DEFAULT_REASONING_EFFORT = resolve_reasoning_effort(LLM_PROVIDER)
 # Cerebras only. "parsed" keeps the reasoning trace out of message.content, so
 # the structured JSON parsing in claims.py / checker.py keeps working. OpenAI
 # rejects the parameter, and never returns the trace in message.content.
+# OpenRouter has no equivalent: it returns the trace in message.reasoning.
 DEFAULT_REASONING_FORMAT = "parsed"
 
 # Client-side pacing, applied to whichever provider is active. Cerebras allows

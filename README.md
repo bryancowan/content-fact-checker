@@ -119,12 +119,13 @@ Type text or paste a URL at the `>` prompt. Type `quit` to exit.
 content-fact-checker/
 ├── src/fact_checker/       # Core library (shared by CLI and web)
 │   ├── config.py           # API keys, provider and model settings
-│   ├── clients.py          # OpenAI, Cerebras + Parallel client init
+│   ├── clients.py          # OpenAI, Cerebras, OpenRouter + Parallel client init
 │   ├── llm.py              # LLM call wrapper (text + image inputs, reasoning)
 │   ├── search.py           # Web search via Parallel
 │   ├── claims.py           # Claim extraction from text/URL/image
 │   ├── checker.py          # Fact-check pipeline
 │   └── rate_limiter.py     # Client-side request rate limiting
+├── evals/                  # Model A/B test: labeled claims, runner, scoring, results
 ├── cli.py                  # Command-line interface
 ├── web_app.py              # Streamlit web interface
 ├── requirements.txt        # Python dependencies
@@ -153,10 +154,11 @@ Set these in your environment, Streamlit secrets, or the Render dashboard, then 
 
 | Setting | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` | `openai` or `cerebras` |
-| `LLM_MODEL_NAME` | `gpt-6-luna` (openai), `qwen-3.8-27b` (cerebras) | Overrides the per-provider default |
+| `LLM_PROVIDER` | `openai` | `openai`, `cerebras` or `openrouter` |
+| `LLM_MODEL_NAME` | `gpt-6-luna` (openai), `qwen-3.8-27b` (cerebras), `nvidia/nemotron-3.5-super-vl` (openrouter) | Overrides the per-provider default. On OpenRouter use its `provider/model` slugs |
 | `OPENAI_REASONING_EFFORT` | `high` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `CEREBRAS_REASONING_EFFORT` | `high` | |
+| `OPENROUTER_REASONING_EFFORT` | `high` | Sent as OpenRouter's `reasoning.effort`; models without reasoning support may ignore it |
 | `LLM_MAX_COMPLETION_TOKENS` | `16384` | Reasoning tokens count against this budget |
 
 Models get retired (Cerebras has already retired `zai-glm-4.7` and `gemma-4-31b` under
@@ -190,12 +192,13 @@ Looking to deploy this somewhere? See [docs/hosting](docs/hosting/README.md) for
 
 ### Provider status
 
-This app depends on two external APIs. When calls fail intermittently, or an error
+This app depends on external APIs. When calls fail intermittently, or an error
 message doesn't match what you're actually sending, **check these first**:
 
 - Parallel (web search) — https://status.parallel.ai
 - OpenAI (inference) — https://status.openai.com
 - Cerebras (inference, if `LLM_PROVIDER=cerebras`) — https://status.cerebras.ai
+- OpenRouter (inference, if `LLM_PROVIDER=openrouter`) — https://status.openrouter.ai
 
 A real outage can produce misleading errors. On 2026-09-07 a Parallel incident
 returned `401 "No API key provided"` for requests that *did* include a valid key,

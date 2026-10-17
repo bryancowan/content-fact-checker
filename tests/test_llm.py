@@ -2,6 +2,7 @@
 
 import os
 import sys
+import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -23,41 +24,59 @@ class _FakeChoice:
         self.message = _FakeMessage(content, refusal)
 
 
+class _FakeUsage:
+    def __init__(self, prompt_tokens, completion_tokens, reasoning_tokens, cost=None):
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+        self.completion_tokens_details = types.SimpleNamespace(reasoning_tokens=reasoning_tokens)
+        if cost is not None:
+            self.cost = cost
+
+
 class _FakeResponse:
-    def __init__(self, content, refusal=None):
+    def __init__(self, content, refusal=None, usage=None):
         self.choices = [_FakeChoice(content, refusal)]
+        if usage is not None:
+            self.usage = usage
 
 
 class _FakeCompletions:
-    def __init__(self, content="fake response", refusal=None, raises=None):
+    def __init__(self, content="fake response", refusal=None, raises=None, usage=None):
         self.calls = []
         self.content = content
         self.refusal = refusal
         self.raises = raises
+        self.usage = usage
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
         if self.raises is not None:
             raise self.raises
-        return _FakeResponse(self.content, self.refusal)
+        return _FakeResponse(self.content, self.refusal, self.usage)
 
 
 class _FakeChat:
-    def __init__(self, content="fake response", refusal=None, raises=None):
-        self.completions = _FakeCompletions(content, refusal, raises)
+    def __init__(self, *args, **kwargs):
+        self.completions = _FakeCompletions(*args, **kwargs)
 
 
 class _FakeClient:
-    def __init__(self, content="fake response", refusal=None, raises=None):
-        self.chat = _FakeChat(content, refusal, raises)
+    def __init__(self, *args, **kwargs):
+        self.chat = _FakeChat(*args, **kwargs)
 
 
 def _install_fake_client(
-    monkeypatch, content="fake response", provider="openai", refusal=None, raises=None
+    monkeypatch, content="fake response", provider="openai", refusal=None, raises=None, usage=None
 ):
-    fake_client = _FakeClient(content, refusal, raises)
+    fake_client = _FakeClient(content, refusal, raises, usage)
+    fake_client.requested_providers = []
+
+    def get_client(requested=None):
+        fake_client.requested_providers.append(requested)
+        return fake_client
+
     monkeypatch.setattr(llm, "LLM_PROVIDER", provider)
-    monkeypatch.setattr(llm, "get_llm_client", lambda: fake_client)
+    monkeypatch.setattr(llm, "get_llm_client", get_client)
     monkeypatch.setattr(llm.llm_rate_limiter, "wait_if_needed", lambda: 0.0)
     return fake_client
 
@@ -211,6 +230,95 @@ def test_cerebras_request_is_unchanged(monkeypatch):
     assert call["reasoning_format"] == "parsed"
 
 
+def test_openrouter_sends_reasoning_object_and_sampling_params(monkeypatch):
+    """OpenRouter documents effort only as a reasoning object; it has no reasoning_format."""
+    fake_client = _install_fake_client(monkeypatch, provider="openrouter")
+
+    llm.call_llm_chat(user_content="hi")
+
+    [call] = fake_client.chat.completions.calls
+    assert call["extra_body"] == {
+        "reasoning": {"effort": "high"},
+        # Without this OpenRouter may route to a backend that ignores the JSON
+        # schema, which would only show up later as a parse failure.
+        "provider": {"require_parameters": True},
+    }
+    assert call["temperature"] == config.DEFAULT_TEMPERATURE
+    assert call["top_p"] == config.DEFAULT_TOP_P
+    assert "reasoning_effort" not in call
+    assert "reasoning_format" not in call
+
+
+def test_default_openrouter_model(monkeypatch):
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+    monkeypatch.setattr(llm, "LLM_MODEL_NAME", config.resolve_model_name("openrouter"))
+    fake_client = _install_fake_client(monkeypatch, provider="openrouter")
+
+    llm.call_llm_chat(user_content="hi")
+
+    [call] = fake_client.chat.completions.calls
+    assert call["model"] == "nvidia/nemotron-3.5-super-vl"
+
+
+# --- per-call override and metrics ------------------------------------------
+
+
+def test_override_switches_provider_model_and_effort_for_calls_inside_it(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch, provider="openai")
+    monkeypatch.setenv("OPENROUTER_REASONING_EFFORT", "low")
+
+    with llm.llm_override("openrouter", "reflection/beam-1.0-501b-a23b"):
+        llm.call_llm_chat(user_content="inside")
+    llm.call_llm_chat(user_content="outside")
+
+    inside, outside = fake_client.chat.completions.calls
+    assert inside["model"] == "reflection/beam-1.0-501b-a23b"
+    assert inside["extra_body"]["reasoning"] == {"effort": "low"}
+    assert outside["model"] != "reflection/beam-1.0-501b-a23b"
+    assert fake_client.requested_providers == ["openrouter", "openai"]
+
+
+def test_override_rejects_an_unknown_provider():
+    with pytest.raises(ValueError, match="Unsupported provider"):
+        with llm.llm_override("anthropic", "x"):
+            pass
+
+
+def test_metrics_report_usage_cost_and_latency(monkeypatch):
+    usage = _FakeUsage(prompt_tokens=120, completion_tokens=300, reasoning_tokens=200, cost=0.0007)
+    _install_fake_client(monkeypatch, provider="openrouter", usage=usage)
+
+    result = llm.call_llm_chat_with_metrics(user_content="hi")
+
+    assert result.text == "fake response"
+    assert result.provider == "openrouter"
+    assert (result.prompt_tokens, result.completion_tokens) == (120, 300)
+    assert result.reasoning_tokens == 200
+    assert result.cost_usd == 0.0007
+    assert result.latency_s >= 0
+
+
+def test_metrics_tolerate_a_response_without_usage(monkeypatch):
+    _install_fake_client(monkeypatch)
+
+    result = llm.call_llm_chat_with_metrics(user_content="hi")
+
+    assert result.prompt_tokens is None
+    assert result.cost_usd is None
+
+
+def test_record_llm_calls_collects_every_call_inside_the_block(monkeypatch):
+    _install_fake_client(monkeypatch)
+
+    llm.call_llm_chat(user_content="before")
+    with llm.record_llm_calls() as calls:
+        llm.call_llm_chat(user_content="one")
+        llm.call_llm_chat(user_content="two")
+    llm.call_llm_chat(user_content="after")
+
+    assert len(calls) == 2
+
+
 # --- failure handling --------------------------------------------------------
 
 
@@ -239,7 +347,11 @@ def test_refusal_is_reported_as_a_refusal(monkeypatch):
 
 @pytest.mark.parametrize(
     ("provider", "sdk", "label"),
-    [("openai", openai, "OpenAI"), ("cerebras", cerebras_sdk, "Cerebras")],
+    [
+        ("openai", openai, "OpenAI"),
+        ("cerebras", cerebras_sdk, "Cerebras"),
+        ("openrouter", openai, "OpenRouter"),
+    ],
 )
 @pytest.mark.parametrize(
     ("error_name", "match"),
@@ -258,6 +370,16 @@ def test_sdk_errors_become_llm_call_errors(monkeypatch, provider, sdk, label, er
         llm.call_llm_chat(user_content="hi")
 
     assert label in str(excinfo.value)
+
+
+def test_a_200_response_without_choices_is_an_llm_call_error(monkeypatch):
+    """OpenRouter can return an error body with HTTP 200; the SDK parses it as no choices."""
+    fake_client = _install_fake_client(monkeypatch, provider="openrouter")
+    error_body = types.SimpleNamespace(choices=None, error={"message": "Provider returned error"})
+    monkeypatch.setattr(fake_client.chat.completions, "create", lambda **kwargs: error_body)
+
+    with pytest.raises(llm.LLMCallError, match="OpenRouter returned no completion.*Provider"):
+        llm.call_llm_chat(user_content="hi")
 
 
 # --- image limits ------------------------------------------------------------

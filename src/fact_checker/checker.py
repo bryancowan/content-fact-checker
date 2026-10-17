@@ -48,12 +48,22 @@ class ClaimResult:
     verdict: str  # "true", "false", or "uncertain"
     reason: str
     sources: list[str] = field(default_factory=list)
+    # The model's output wasn't valid JSON, so verdict is the "uncertain" fallback
+    # rather than the model's answer. Evals count these apart from wrong verdicts.
+    parse_failed: bool = False
 
 
 def fact_check_single_claim(claim: str) -> ClaimResult:
     """Fact-check a single claim: search for evidence, then judge with the LLM."""
-    # Search the web for evidence
-    results = search_web(query=claim, num=6, mode="advanced")
+    results = search_web(query=claim, num=6, mode="fast")
+    return judge_claim(claim, results)
+
+
+def judge_claim(claim: str, results: list[dict]) -> ClaimResult:
+    """Judge a claim against search results already in hand.
+
+    Split from the search so an eval can reuse one set of results across models.
+    """
     evidence_context = build_evidence_context(results)
     evidence_urls = {str(r["url"]) for r in results if r.get("url")}
 
@@ -86,9 +96,11 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
         response_format=_VERDICT_RESPONSE_FORMAT,
     )
 
+    parse_failed = False
     try:
         data = json.loads(raw.strip())
     except Exception:
+        parse_failed = True
         data = {
             "verdict": "uncertain",
             "reason": "Could not parse model output.",
@@ -109,6 +121,7 @@ def fact_check_single_claim(claim: str) -> ClaimResult:
         verdict=verdict,
         reason=data.get("reason", ""),
         sources=top_sources,
+        parse_failed=parse_failed,
     )
 
 

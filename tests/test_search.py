@@ -42,7 +42,7 @@ def test_search_web_calls_stable_search_api_with_advanced_settings(monkeypatch):
     fake_client = _FakeParallelClient(fake_response)
     monkeypatch.setattr(search_module, "get_parallel_client", lambda: fake_client)
 
-    results = search_module.search_web("some query", num=3, mode="advanced")
+    results = search_module.search_web("some query", num=3)
 
     assert results == [
         {
@@ -54,7 +54,8 @@ def test_search_web_calls_stable_search_api_with_advanced_settings(monkeypatch):
     ]
     [call] = fake_client.calls
     assert call["search_queries"] == ["some query"]
-    assert call["mode"] == "advanced"
+    # `fast` is the default; omitting mode on the REST API would give `advanced` (5x the price).
+    assert call["mode"] == "fast"
     # These must be nested under advanced_settings, not passed as top-level
     # kwargs — that's the exact shape that broke when parallel-web went 0.x -> 1.x.
     assert call["advanced_settings"] == {
@@ -121,6 +122,47 @@ def test_build_evidence_context_truncates_long_context():
 
     assert len(context) <= 200 + len("\n\n[Context truncated for length]")
     assert context.endswith("[Context truncated for length]")
+
+
+def test_build_evidence_context_gives_every_source_a_share():
+    results = [
+        {
+            "url": f"https://s{i}.example",
+            "title": f"T{i}",
+            "publish_date": None,
+            "excerpts": ["y" * 5000],
+        }
+        for i in range(6)
+    ]
+
+    context = build_evidence_context(results, max_chars=3000)
+
+    for i in range(6):
+        assert f"[Source {i + 1}]" in context
+    assert "[Context truncated" not in context
+
+
+def test_build_evidence_context_gives_unused_share_to_longer_sources():
+    results = [
+        {
+            "url": "https://short.example",
+            "title": "S",
+            "publish_date": None,
+            "excerpts": ["a" * 100],
+        },
+        {
+            "url": "https://long.example",
+            "title": "L",
+            "publish_date": None,
+            "excerpts": ["b" * 5000],
+        },
+    ]
+
+    context = build_evidence_context(results, max_chars=3000)
+
+    assert "a" * 100 in context  # short source is untouched
+    assert context.count("b") > 2000  # long source gets well over an even half-share
+    assert "[Context truncated" not in context
 
 
 def test_build_evidence_context_empty_results():
