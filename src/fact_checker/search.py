@@ -1,9 +1,7 @@
-import textwrap
-
 from .clients import get_parallel_client
 
 
-def search_web(query: str, num: int = 5, mode: str = "advanced") -> list[dict]:
+def search_web(query: str, num: int = 5, mode: str = "fast") -> list[dict]:
     """Search the web using Parallel's Search API.
 
     Returns a list of dicts with: url, title, publish_date, excerpts.
@@ -36,23 +34,52 @@ def search_web(query: str, num: int = 5, mode: str = "advanced") -> list[dict]:
     return results
 
 
-def build_evidence_context(results: list[dict], max_chars: int = 8000) -> str:
-    """Format search results into a readable evidence block for the LLM."""
+def _format_source(idx: int, r: dict, excerpts_text: str) -> str:
+    return "\n".join(
+        [
+            f"[Source {idx + 1}]",
+            f"Title: {r['title'] or r['url']}",
+            f"URL: {r['url']}",
+            f"Publish date: {r['publish_date']}",
+            "",
+            "Excerpts:",
+            excerpts_text,
+        ]
+    )
+
+
+def _allocate(lengths: list[int], budget: int) -> list[int]:
+    """Split budget across sources: short ones keep everything, the rest share what's left."""
+    alloc = [0] * len(lengths)
+    remaining = max(budget, 0)
+    for k, i in enumerate(sorted(range(len(lengths)), key=lengths.__getitem__)):
+        alloc[i] = min(lengths[i], remaining // (len(lengths) - k))
+        remaining -= alloc[i]
+    return alloc
+
+
+def build_evidence_context(results: list[dict], max_chars: int = 16000) -> str:
+    """Format search results into a readable evidence block for the LLM.
+
+    The budget (after headers) is shared across sources: a short excerpt keeps all
+    of its text and its unused share goes to the longer ones, so no single source
+    can push the others out of the context.
+    """
+    separator = "\n\n"
+    ellipsis = " [...]"
+    fixed_chars = sum(len(_format_source(i, r, "")) for i, r in enumerate(results))
+    fixed_chars += len(separator) * max(len(results) - 1, 0)
+
+    texts = ["\n\n".join(r["excerpts"][:2]) for r in results]
+    alloc = _allocate([len(t) for t in texts], max_chars - fixed_chars)
+
     blocks = []
-    for idx, r in enumerate(results):
-        excerpts_text = "\n\n".join(r["excerpts"][:2])
-        block = textwrap.dedent(f"""
-        [Source {idx + 1}]
-        Title: {r["title"] or r["url"]}
-        URL: {r["url"]}
-        Publish date: {r["publish_date"]}
+    for idx, (r, text) in enumerate(zip(results, texts, strict=True)):
+        if len(text) > alloc[idx]:
+            text = text[: max(alloc[idx] - len(ellipsis), 0)] + ellipsis
+        blocks.append(_format_source(idx, r, text))
 
-        Excerpts:
-        {excerpts_text}
-        """).strip()
-        blocks.append(block)
-
-    context = "\n\n".join(blocks)
+    context = separator.join(blocks)
     if len(context) > max_chars:
         context = context[:max_chars] + "\n\n[Context truncated for length]"
     return context

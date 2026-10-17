@@ -53,7 +53,7 @@ class ClaimResult:
 def fact_check_single_claim(claim: str) -> ClaimResult:
     """Fact-check a single claim: search for evidence, then judge with the LLM."""
     # Search the web for evidence
-    results = search_web(query=claim, num=6, mode="advanced")
+    results = search_web(query=claim, num=6, mode="fast")
     evidence_context = build_evidence_context(results)
     evidence_urls = {str(r["url"]) for r in results if r.get("url")}
 
