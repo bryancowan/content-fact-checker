@@ -40,6 +40,21 @@ class LLMCallError(RuntimeError):
     """A chat completion failed, or returned nothing usable."""
 
 
+class LLMTruncatedError(LLMCallError):
+    """The reply hit the completion-token cap before it finished, on every try.
+
+    Distinct from other failures because the text that did come back is not empty,
+    just cut off -- and a cut-off JSON reply would otherwise parse as garbage and
+    be mistaken for a model that couldn't decide.
+    """
+
+
+# One retry: truncation is usually the model misbehaving on that one sampling (the
+# same claim succeeded in about a third of runs), so a second try often works,
+# while more would multiply the cost of a genuinely runaway reply.
+TRUNCATION_RETRIES = 1
+
+
 @dataclass
 class LLMResult:
     """A completion's text plus what it cost to get.
@@ -56,6 +71,7 @@ class LLMResult:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
+    finish_reason: str | None = None  # "length" means the reply was cut off at the cap
 
 
 # Provider and model are config read at import, so an A/B run can't switch them by
@@ -197,6 +213,10 @@ def call_llm_chat_with_metrics(
     block is active. reasoning_effort defaults to that provider's setting.
 
     Returns an LLMResult carrying the response text, latency and token usage.
+    A reply cut off at max_completion_tokens is retried TRUNCATION_RETRIES times;
+    if it is still cut off, LLMTruncatedError is raised. Every attempt is recorded
+    by record_llm_calls().
+
     Raises LLMCallError if the API call fails or comes back with empty content.
     """
     provider, model = _override.get() or (LLM_PROVIDER, LLM_MODEL_NAME)
@@ -217,84 +237,101 @@ def call_llm_chat_with_metrics(
     else:
         messages.append({"role": "user", "content": user_content})
 
-    llm_rate_limiter.wait_if_needed()
-
     extra_kwargs = _reasoning_and_sampling_kwargs(
         provider, temperature, top_p, reasoning_effort, reasoning_format
     )
     if response_format is not None:
         extra_kwargs["response_format"] = response_format
 
-    started = time.perf_counter()
-    try:
-        resp = get_llm_client(provider).chat.completions.create(
+    def request_once() -> LLMResult:
+        llm_rate_limiter.wait_if_needed()
+
+        started = time.perf_counter()
+        try:
+            resp = get_llm_client(provider).chat.completions.create(
+                model=model,
+                messages=messages,
+                max_completion_tokens=max_completion_tokens,
+                **extra_kwargs,
+            )
+        except _NOT_FOUND_ERRORS as exc:
+            # The signature of a retired model -- this app has been broken by
+            # Cerebras deprecations twice already, so name the likely cause.
+            raise LLMCallError(
+                f"{label} rejected model {model!r}. It may have been "
+                f"deprecated; check {_DEPRECATION_URLS[provider]} and set "
+                "LLM_MODEL_NAME to a current model."
+            ) from exc
+        except _RATE_LIMIT_ERRORS as exc:
+            raise LLMCallError(
+                f"{label} rate limit exceeded after retries. Lower "
+                "LLM_REQUESTS_PER_MIN or wait before retrying."
+            ) from exc
+        except _CONNECTION_ERRORS as exc:
+            raise LLMCallError(f"Could not reach the {label} API: {exc}") from exc
+        except _STATUS_ERRORS as exc:
+            raise LLMCallError(f"{label} API error: {exc}") from exc
+
+        latency_s = time.perf_counter() - started
+
+        # OpenRouter can answer HTTP 200 with an error body and no choices. The SDK
+        # parses that without complaint (strict response validation is off), so
+        # indexing choices below would raise a bare TypeError.
+        if not getattr(resp, "choices", None):
+            error = getattr(resp, "error", None)
+            raise LLMCallError(f"{label} returned no completion" + (f": {error}" if error else "."))
+
+        choice = resp.choices[0]
+        message = choice.message
+        # Structured outputs can come back as a refusal with content=None; naming it
+        # beats the budget-exhausted message below, which would send you chasing the
+        # wrong cause.
+        refusal = getattr(message, "refusal", None)
+        if refusal:
+            raise LLMCallError(f"{label} refused the request: {refusal}")
+
+        content = message.content
+        if not content or not content.strip():
+            # Most likely the reasoning trace consumed the whole completion budget.
+            # Fail loudly: callers would otherwise silently degrade to "no claims
+            # found" or a verdict of "uncertain".
+            raise LLMCallError(
+                f"{label} returned empty content. The reasoning trace may have used "
+                f"the entire {max_completion_tokens}-token completion budget; try "
+                f"raising LLM_MAX_COMPLETION_TOKENS or lowering "
+                f"{REASONING_EFFORT_ENV[provider]}."
+            )
+
+        prompt_tokens, completion_tokens, reasoning_tokens, cost_usd = _token_counts(
+            getattr(resp, "usage", None)
+        )
+        result = LLMResult(
+            text=content,
+            provider=provider,
             model=model,
-            messages=messages,
-            max_completion_tokens=max_completion_tokens,
-            **extra_kwargs,
+            latency_s=latency_s,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            reasoning_tokens=reasoning_tokens,
+            cost_usd=cost_usd,
+            finish_reason=getattr(choice, "finish_reason", None),
         )
-    except _NOT_FOUND_ERRORS as exc:
-        # The signature of a retired model -- this app has been broken by
-        # Cerebras deprecations twice already, so name the likely cause.
-        raise LLMCallError(
-            f"{label} rejected model {model!r}. It may have been "
-            f"deprecated; check {_DEPRECATION_URLS[provider]} and set "
-            "LLM_MODEL_NAME to a current model."
-        ) from exc
-    except _RATE_LIMIT_ERRORS as exc:
-        raise LLMCallError(
-            f"{label} rate limit exceeded after retries. Lower "
-            "LLM_REQUESTS_PER_MIN or wait before retrying."
-        ) from exc
-    except _CONNECTION_ERRORS as exc:
-        raise LLMCallError(f"Could not reach the {label} API: {exc}") from exc
-    except _STATUS_ERRORS as exc:
-        raise LLMCallError(f"{label} API error: {exc}") from exc
+        # Record every attempt, so a retry's cost is counted and a reply that ends
+        # up as an error still shows what it spent.
+        if (calls := _recorder.get()) is not None:
+            calls.append(result)
+        return result
 
-    latency_s = time.perf_counter() - started
-
-    # OpenRouter can answer HTTP 200 with an error body and no choices. The SDK
-    # parses that without complaint (strict response validation is off), so
-    # indexing choices below would raise a bare TypeError.
-    if not getattr(resp, "choices", None):
-        error = getattr(resp, "error", None)
-        raise LLMCallError(f"{label} returned no completion" + (f": {error}" if error else "."))
-
-    message = resp.choices[0].message
-    # Structured outputs can come back as a refusal with content=None; naming it
-    # beats the budget-exhausted message below, which would send you chasing the
-    # wrong cause.
-    refusal = getattr(message, "refusal", None)
-    if refusal:
-        raise LLMCallError(f"{label} refused the request: {refusal}")
-
-    content = message.content
-    if not content or not content.strip():
-        # Most likely the reasoning trace consumed the whole completion budget.
-        # Fail loudly: callers would otherwise silently degrade to "no claims
-        # found" or a verdict of "uncertain".
-        raise LLMCallError(
-            f"{label} returned empty content. The reasoning trace may have used "
-            f"the entire {max_completion_tokens}-token completion budget; try "
-            f"raising LLM_MAX_COMPLETION_TOKENS or lowering "
-            f"{REASONING_EFFORT_ENV[provider]}."
+    result = request_once()
+    for _ in range(TRUNCATION_RETRIES):
+        if result.finish_reason != "length":
+            break
+        result = request_once()
+    if result.finish_reason == "length":
+        raise LLMTruncatedError(
+            f"{label} cut its reply off at the {max_completion_tokens}-token limit "
+            f"on {1 + TRUNCATION_RETRIES} tries."
         )
-
-    prompt_tokens, completion_tokens, reasoning_tokens, cost_usd = _token_counts(
-        getattr(resp, "usage", None)
-    )
-    result = LLMResult(
-        text=content,
-        provider=provider,
-        model=model,
-        latency_s=latency_s,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        reasoning_tokens=reasoning_tokens,
-        cost_usd=cost_usd,
-    )
-    if (calls := _recorder.get()) is not None:
-        calls.append(result)
     return result
 
 

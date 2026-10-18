@@ -20,8 +20,9 @@ class _FakeMessage:
 
 
 class _FakeChoice:
-    def __init__(self, content, refusal=None):
+    def __init__(self, content, refusal=None, finish_reason="stop"):
         self.message = _FakeMessage(content, refusal)
+        self.finish_reason = finish_reason
 
 
 class _FakeUsage:
@@ -34,15 +35,18 @@ class _FakeUsage:
 
 
 class _FakeResponse:
-    def __init__(self, content, refusal=None, usage=None):
-        self.choices = [_FakeChoice(content, refusal)]
+    def __init__(self, content, refusal=None, usage=None, finish_reason="stop"):
+        self.choices = [_FakeChoice(content, refusal, finish_reason)]
         if usage is not None:
             self.usage = usage
 
 
 class _FakeCompletions:
-    def __init__(self, content="fake response", refusal=None, raises=None, usage=None):
+    def __init__(
+        self, content="fake response", refusal=None, raises=None, usage=None, finish_reasons=()
+    ):
         self.calls = []
+        self.finish_reasons = list(finish_reasons)  # one per call, then "stop"
         self.content = content
         self.refusal = refusal
         self.raises = raises
@@ -52,7 +56,8 @@ class _FakeCompletions:
         self.calls.append(kwargs)
         if self.raises is not None:
             raise self.raises
-        return _FakeResponse(self.content, self.refusal, self.usage)
+        finish = self.finish_reasons.pop(0) if self.finish_reasons else "stop"
+        return _FakeResponse(self.content, self.refusal, self.usage, finish)
 
 
 class _FakeChat:
@@ -66,9 +71,15 @@ class _FakeClient:
 
 
 def _install_fake_client(
-    monkeypatch, content="fake response", provider="openai", refusal=None, raises=None, usage=None
+    monkeypatch,
+    content="fake response",
+    provider="openai",
+    refusal=None,
+    raises=None,
+    usage=None,
+    finish_reasons=(),
 ):
-    fake_client = _FakeClient(content, refusal, raises, usage)
+    fake_client = _FakeClient(content, refusal, raises, usage, finish_reasons)
     fake_client.requested_providers = []
 
     def get_client(requested=None):
@@ -317,6 +328,42 @@ def test_record_llm_calls_collects_every_call_inside_the_block(monkeypatch):
     llm.call_llm_chat(user_content="after")
 
     assert len(calls) == 2
+
+
+# --- truncation --------------------------------------------------------------
+
+
+def test_a_truncated_reply_is_retried_once_and_the_second_try_is_returned(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch, finish_reasons=["length", "stop"])
+
+    with llm.record_llm_calls() as calls:
+        result = llm.call_llm_chat_with_metrics(user_content="hi")
+
+    assert len(fake_client.chat.completions.calls) == 2
+    assert result.finish_reason == "stop"
+    # Both attempts are recorded, so the retry's cost isn't lost.
+    assert [c.finish_reason for c in calls] == ["length", "stop"]
+
+
+def test_a_reply_truncated_on_both_tries_raises_a_distinct_error(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch, finish_reasons=["length", "length"])
+
+    with pytest.raises(llm.LLMTruncatedError, match="cut its reply off.*2 tries"):
+        llm.call_llm_chat(user_content="hi")
+
+    assert len(fake_client.chat.completions.calls) == 2  # one retry, not more
+
+
+def test_a_truncation_error_is_still_an_llm_call_error():
+    assert issubclass(llm.LLMTruncatedError, llm.LLMCallError)
+
+
+def test_a_normal_reply_is_not_retried(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch)
+
+    llm.call_llm_chat(user_content="hi")
+
+    assert len(fake_client.chat.completions.calls) == 1
 
 
 # --- failure handling --------------------------------------------------------

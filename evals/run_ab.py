@@ -29,6 +29,7 @@ from evals.scoring import (  # noqa: E402
     price_tokens,
     render_markdown,
     summarize,
+    total_usage,
 )
 from fact_checker.checker import judge_claim  # noqa: E402
 from fact_checker.config import SUPPORTED_PROVIDERS  # noqa: E402
@@ -109,15 +110,15 @@ def run_attempt(spec: str, claim: dict, results: list[dict], pricing: dict) -> A
             attempt.verdict = judged.verdict
             attempt.parse_failed = judged.parse_failed
     if calls:
-        call = calls[-1]
-        attempt.latency_s = call.latency_s
-        attempt.prompt_tokens = call.prompt_tokens
-        attempt.completion_tokens = call.completion_tokens
-        attempt.reasoning_tokens = call.reasoning_tokens
-        attempt.cost_usd = call.cost_usd
+        usage = total_usage(calls)
+        attempt.latency_s = usage["latency_s"]
+        attempt.prompt_tokens = usage["prompt_tokens"]
+        attempt.completion_tokens = usage["completion_tokens"]
+        attempt.reasoning_tokens = usage["reasoning_tokens"]
+        attempt.cost_usd = usage["cost_usd"]
         if attempt.cost_usd is None:
             attempt.cost_usd = price_tokens(
-                call.prompt_tokens, call.completion_tokens, pricing.get(spec)
+                usage["prompt_tokens"], usage["completion_tokens"], pricing.get(spec)
             )
     return attempt
 

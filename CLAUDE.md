@@ -59,7 +59,7 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 - `src/fact_checker/search.py` — `search_web()` wraps Parallel API; `build_evidence_context()` formats results for the LLM prompt (unaffected by image support — evidence search is always text-based)
 - `src/fact_checker/display.py` — `escape_dollars()`; Streamlit renders `$...$` as LaTeX, so every model- or user-supplied string passed to `st.markdown`/`st.caption` in `web_app.py` goes through it (prices otherwise lose their dollar signs). `st.text` and the CLI don't need it.
 - `src/fact_checker/claims.py` — LLM-based claim extraction from text, URL, or image (PNG/JPEG only)
-- `src/fact_checker/checker.py` — `fact_check_text()` / `fact_check_url()` / `fact_check_image()` orchestrate the full pipeline; `ClaimResult` dataclass holds verdict/reason/sources
+- `src/fact_checker/checker.py` — `fact_check_text()` / `fact_check_url()` / `fact_check_image()` orchestrate the full pipeline; `ClaimResult` dataclass holds verdict/reason/sources. A reply that is cut off at the token cap (retried once in `llm.py`, then `LLMTruncatedError`) or isn't valid JSON becomes verdict `"error"`, shown as a distinct grey "Error" badge, never as `"uncertain"`
 
 `web_app.py` adds `src/` to `sys.path` and imports directly from `fact_checker`.
 
@@ -103,6 +103,23 @@ one place that handles it:
 - **Cerebras (`qwen-3.8-27b`)**: sends `temperature`, `top_p`, and `reasoning_format`
   pinned to `"parsed"`, so the reasoning trace lands in `message.reasoning` and
   `message.content` stays pure JSON for the structured-output parsers.
+
+**If you move to an open model, test the JSON-quote failure first.** On 2026-10-17
+`nvidia/nemotron-3.5-super-vl` failed on the claim "Napoleon was unusually short..." (`m03`
+in `evals/claims-hard.jsonl`) in 8 of 12 runs: its reason contained an unescaped inch mark
+(`5'6"`), which closed the JSON string, and it then emitted whitespace until it hit the
+16,384-token cap (25-66 s each). Appending this sentence to the verdict system prompt cut
+failures to 1 of 12:
+
+> Inside JSON string values, never use double-quote characters (write inches as "in" or use
+> single quotes), so the JSON stays valid.
+
+It is not in the prompt because `gpt-6-luna` never failed (0 of 228 attempts), and it
+changes the prompt for every model. When evaluating an open model, repeat `m03` a dozen
+times with and without the sentence, add it if it helps, then re-run
+`evals/claims-hard.jsonl`. `llm.py` retries a cut-off reply once and `checker.py` reports a
+second failure as an `error` verdict, so this no longer degrades silently, but each failure
+still costs two capped calls.
 
 Use `max_completion_tokens`, not the deprecated `max_tokens`; sending both is an error.
 

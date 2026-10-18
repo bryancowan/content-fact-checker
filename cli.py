@@ -16,6 +16,7 @@ from fact_checker.llm import LLMCallError
 GREEN = "\033[92m"
 RED = "\033[91m"
 YELLOW = "\033[93m"
+MAGENTA = "\033[95m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
@@ -23,6 +24,7 @@ VERDICT_COLORS = {
     "true": GREEN,
     "false": RED,
     "uncertain": YELLOW,
+    "error": MAGENTA,  # a technical failure, not a judgement: distinct from "uncertain"
 }
 
 

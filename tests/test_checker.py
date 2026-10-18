@@ -6,7 +6,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from fact_checker import checker
+import pytest
+
+from fact_checker import checker, llm
 
 
 def _stub_search(monkeypatch, urls=()):
@@ -52,14 +54,15 @@ def test_fact_check_single_claim_invalid_verdict_falls_back_to_uncertain(monkeyp
     assert result.verdict == "uncertain"
 
 
-def test_fact_check_single_claim_malformed_json_falls_back(monkeypatch):
+def test_fact_check_single_claim_malformed_json_is_an_error_not_uncertain(monkeypatch):
+    """A technical failure must not be shown to the user as the model being unsure."""
     _stub_search(monkeypatch)
     monkeypatch.setattr(checker, "call_llm_chat", lambda **kwargs: "not json at all")
 
     result = checker.fact_check_single_claim("some claim")
 
-    assert result.verdict == "uncertain"
-    assert result.reason == "Could not parse model output."
+    assert result.verdict == "error"
+    assert "expected format" in result.reason
     assert result.sources == []
 
 
@@ -157,13 +160,38 @@ def test_fact_check_text_calls_on_progress_for_each_claim(monkeypatch):
 
 
 def test_judge_claim_flags_unparseable_output_instead_of_hiding_it(monkeypatch):
-    """The "uncertain" fallback looks like a real verdict; evals need to tell them apart."""
+    """Evals count these apart from wrong verdicts."""
     monkeypatch.setattr(checker, "call_llm_chat", lambda **kwargs: "not json")
 
     result = checker.judge_claim("some claim", [])
 
-    assert result.verdict == "uncertain"
+    assert result.verdict == "error"
     assert result.parse_failed is True
+
+
+def test_a_reply_cut_off_after_the_retry_is_an_error_not_uncertain(monkeypatch):
+    def cut_off(**kwargs):
+        raise llm.LLMTruncatedError("cut off")
+
+    monkeypatch.setattr(checker, "call_llm_chat", cut_off)
+
+    result = checker.judge_claim("some claim", [])
+
+    assert result.verdict == "error"
+    assert "cut off" in result.reason
+    assert result.parse_failed is True
+
+
+def test_other_llm_failures_still_stop_the_run(monkeypatch):
+    """Only an unusable reply is turned into a per-claim error; an API outage isn't."""
+
+    def down(**kwargs):
+        raise llm.LLMCallError("API down")
+
+    monkeypatch.setattr(checker, "call_llm_chat", down)
+
+    with pytest.raises(llm.LLMCallError, match="API down"):
+        checker.judge_claim("some claim", [])
 
 
 def test_judge_claim_does_not_flag_valid_output(monkeypatch):

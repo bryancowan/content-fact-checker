@@ -48,6 +48,25 @@ def price_tokens(
     return (prompt_tokens * input_price + completion_tokens * output_price) / 1_000_000
 
 
+def _sum_or_none(values: list) -> float | int | None:
+    return None if any(v is None for v in values) else sum(values)
+
+
+def total_usage(calls: list) -> dict:
+    """Sum what a block of recorded LLM calls cost: a truncation retry makes two.
+
+    A figure is None unless every call reported it, so a partial total can't pass
+    for a real one.
+    """
+    return {
+        "latency_s": _sum_or_none([c.latency_s for c in calls]),
+        "prompt_tokens": _sum_or_none([c.prompt_tokens for c in calls]),
+        "completion_tokens": _sum_or_none([c.completion_tokens for c in calls]),
+        "reasoning_tokens": _sum_or_none([c.reasoning_tokens for c in calls]),
+        "cost_usd": _sum_or_none([c.cost_usd for c in calls]),
+    }
+
+
 def percentile(values: list[float], pct: float) -> float | None:
     """Nearest-rank percentile; None for an empty list."""
     if not values:

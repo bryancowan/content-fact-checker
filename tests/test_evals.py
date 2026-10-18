@@ -2,6 +2,7 @@
 
 import os
 import sys
+import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
@@ -164,3 +165,21 @@ def test_report_omits_the_category_table_when_claims_have_none():
     }
 
     assert "Accuracy by category" not in scoring.render_markdown({"m": summary}, meta)
+
+
+def test_total_usage_sums_a_retry_and_refuses_partial_totals():
+    first = types.SimpleNamespace(
+        latency_s=2.0, prompt_tokens=100, completion_tokens=50, reasoning_tokens=10, cost_usd=0.001
+    )
+    second = types.SimpleNamespace(
+        latency_s=3.0, prompt_tokens=100, completion_tokens=70, reasoning_tokens=20, cost_usd=0.002
+    )
+
+    total = scoring.total_usage([first, second])
+
+    assert total["latency_s"] == 5.0
+    assert total["completion_tokens"] == 120
+    assert total["cost_usd"] == pytest.approx(0.003)
+
+    second.cost_usd = None
+    assert scoring.total_usage([first, second])["cost_usd"] is None

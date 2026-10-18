@@ -27,7 +27,7 @@ from evals.image_scoring import (  # noqa: E402
     summarize,
 )
 from evals.run_ab import DEFAULT_PRICING, RESULTS, validate_specs  # noqa: E402
-from evals.scoring import parse_model_spec, price_tokens  # noqa: E402
+from evals.scoring import parse_model_spec, price_tokens, total_usage  # noqa: E402
 from fact_checker.claims import extract_claims_from_image  # noqa: E402
 from fact_checker.llm import LLMCallError, llm_override, record_llm_calls  # noqa: E402
 
@@ -45,16 +45,16 @@ def run_attempt(spec: str, entry: dict, image_bytes: bytes, pricing: dict) -> Im
         except LLMCallError as exc:
             attempt.error = str(exc)
     if calls:
-        call = calls[-1]
-        attempt.parse_failed = not reply_is_valid_claims_json(call.text)
-        attempt.latency_s = call.latency_s
-        attempt.prompt_tokens = call.prompt_tokens
-        attempt.completion_tokens = call.completion_tokens
-        attempt.reasoning_tokens = call.reasoning_tokens
-        attempt.cost_usd = call.cost_usd
+        attempt.parse_failed = not reply_is_valid_claims_json(calls[-1].text)
+        usage = total_usage(calls)
+        attempt.latency_s = usage["latency_s"]
+        attempt.prompt_tokens = usage["prompt_tokens"]
+        attempt.completion_tokens = usage["completion_tokens"]
+        attempt.reasoning_tokens = usage["reasoning_tokens"]
+        attempt.cost_usd = usage["cost_usd"]
         if attempt.cost_usd is None:
             attempt.cost_usd = price_tokens(
-                call.prompt_tokens, call.completion_tokens, pricing.get(spec)
+                usage["prompt_tokens"], usage["completion_tokens"], pricing.get(spec)
             )
     attempt.found, attempt.extras, attempt.injected = score_claims(
         attempt.claims, entry["expected"], entry["forbidden"]
