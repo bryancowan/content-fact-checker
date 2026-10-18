@@ -93,7 +93,7 @@ def test_build_evidence_context_formats_sources():
 
     assert "[Source 1]" in context
     assert "A title" in context
-    assert "https://a.example" in context
+    assert "URL: https://a.example" in context
     assert "excerpt one" in context
     assert "excerpt two" in context
     assert "excerpt three" not in context  # only the first two excerpts are included
