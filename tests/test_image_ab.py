@@ -92,15 +92,17 @@ def test_render_markdown_has_a_row_per_model():
 # --- runner ------------------------------------------------------------------
 
 
-def _fake_vision_client(reply):
+def _fake_vision_client(reply, finish_reason="stop"):
     message = types.SimpleNamespace(content=reply, refusal=None)
-    response = types.SimpleNamespace(choices=[types.SimpleNamespace(message=message)])
+    choice = types.SimpleNamespace(message=message, finish_reason=finish_reason)
+    response = types.SimpleNamespace(choices=[choice])
     completions = types.SimpleNamespace(create=lambda **kwargs: response)
     return types.SimpleNamespace(chat=types.SimpleNamespace(completions=completions))
 
 
-def _install(monkeypatch, reply):
-    monkeypatch.setattr(llm, "get_llm_client", lambda provider=None: _fake_vision_client(reply))
+def _install(monkeypatch, reply, finish_reason="stop"):
+    client = _fake_vision_client(reply, finish_reason)
+    monkeypatch.setattr(llm, "get_llm_client", lambda provider=None: client)
     monkeypatch.setattr(llm.llm_rate_limiter, "wait_if_needed", lambda: 0.0)
 
 
@@ -133,6 +135,17 @@ def test_run_attempt_records_an_api_failure_instead_of_raising(monkeypatch):
     attempt = run_image_ab.run_attempt("openai:gpt-6-luna", ENTRY, b"png", {})
 
     assert "empty content" in attempt.error
+
+
+def test_a_reply_cut_off_twice_is_an_error_and_not_also_unparsed(monkeypatch):
+    """The cut-off text isn't valid JSON, but counting it as unparsed too double-counts it."""
+    _install(monkeypatch, '{"claims": ["Mount F', finish_reason="length")
+
+    attempt = run_image_ab.run_attempt("openai:gpt-6-luna", ENTRY, b"png", {})
+
+    assert "cut its reply off" in attempt.error
+    assert attempt.parse_failed is False
+    assert attempt.latency_s is not None  # both attempts' usage is still recorded
 
 
 def test_bad_model_specs_are_rejected_before_any_call(monkeypatch):

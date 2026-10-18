@@ -45,7 +45,10 @@ def run_attempt(spec: str, entry: dict, image_bytes: bytes, pricing: dict) -> Im
         except LLMCallError as exc:
             attempt.error = str(exc)
     if calls:
-        attempt.parse_failed = not reply_is_valid_claims_json(calls[-1].text)
+        # Only a reply that came back can be malformed. After an LLMCallError the last
+        # recorded call is a cut-off one, which would otherwise count as unparsed too.
+        if attempt.error is None:
+            attempt.parse_failed = not reply_is_valid_claims_json(calls[-1].text)
         usage = total_usage(calls)
         attempt.latency_s = usage["latency_s"]
         attempt.prompt_tokens = usage["prompt_tokens"]
