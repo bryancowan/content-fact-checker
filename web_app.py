@@ -80,6 +80,8 @@ VERDICT_STYLES = {
     "true": {"label": "True", "color": "green", "icon": ":material/check:"},
     "false": {"label": "False", "color": "red", "icon": ":material/close:"},
     "uncertain": {"label": "Uncertain", "color": "yellow", "icon": ":material/help:"},
+    # A technical failure, not a judgement: kept visibly apart from "Uncertain".
+    "error": {"label": "Error", "color": "gray", "icon": ":material/error:"},
 }
 
 tab_text, tab_url, tab_image = st.tabs(["Check Text", "Check URL", "Check Image"])

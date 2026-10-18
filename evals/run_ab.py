@@ -29,6 +29,7 @@ from evals.scoring import (  # noqa: E402
     price_tokens,
     render_markdown,
     summarize,
+    total_usage,
 )
 from fact_checker.checker import judge_claim  # noqa: E402
 from fact_checker.config import SUPPORTED_PROVIDERS  # noqa: E402
@@ -40,6 +41,26 @@ DEFAULT_CLAIMS = EVALS / "claims.jsonl"
 DEFAULT_PRICING = EVALS / "pricing.json"
 RESULTS = EVALS / "results"
 EVIDENCE_CACHE = RESULTS / "evidence-cache.json"
+
+
+def validate_specs(parser: argparse.ArgumentParser, models: str) -> list[str]:
+    """Split --models and reject bad specs before any paid call.
+
+    A typo found mid-run would abort after the earlier models had been paid for,
+    with no report written.
+    """
+    specs = [s.strip() for s in models.split(",") if s.strip()]
+    for spec in specs:
+        try:
+            provider, _ = parse_model_spec(spec)
+        except ValueError as exc:
+            parser.error(str(exc))
+        if provider not in SUPPORTED_PROVIDERS:
+            parser.error(
+                f"Unknown provider {provider!r} in {spec!r}; "
+                f"expected one of {', '.join(SUPPORTED_PROVIDERS)}."
+            )
+    return specs
 
 
 def load_claims(path: Path, limit: int | None) -> list[dict]:
@@ -77,7 +98,9 @@ def get_evidence(claims: list[dict]) -> dict[str, list[dict]]:
 
 def run_attempt(spec: str, claim: dict, results: list[dict], pricing: dict) -> Attempt:
     provider, model = parse_model_spec(spec)
-    attempt = Attempt(model=spec, claim_id=claim["id"], label=claim["label"])
+    attempt = Attempt(
+        model=spec, claim_id=claim["id"], label=claim["label"], category=claim.get("category")
+    )
     with llm_override(provider, model), record_llm_calls() as calls:
         try:
             judged = judge_claim(claim["claim"], results)
@@ -87,15 +110,15 @@ def run_attempt(spec: str, claim: dict, results: list[dict], pricing: dict) -> A
             attempt.verdict = judged.verdict
             attempt.parse_failed = judged.parse_failed
     if calls:
-        call = calls[-1]
-        attempt.latency_s = call.latency_s
-        attempt.prompt_tokens = call.prompt_tokens
-        attempt.completion_tokens = call.completion_tokens
-        attempt.reasoning_tokens = call.reasoning_tokens
-        attempt.cost_usd = call.cost_usd
+        usage = total_usage(calls)
+        attempt.latency_s = usage["latency_s"]
+        attempt.prompt_tokens = usage["prompt_tokens"]
+        attempt.completion_tokens = usage["completion_tokens"]
+        attempt.reasoning_tokens = usage["reasoning_tokens"]
+        attempt.cost_usd = usage["cost_usd"]
         if attempt.cost_usd is None:
             attempt.cost_usd = price_tokens(
-                call.prompt_tokens, call.completion_tokens, pricing.get(spec)
+                usage["prompt_tokens"], usage["completion_tokens"], pricing.get(spec)
             )
     return attempt
 
@@ -110,19 +133,7 @@ def main() -> None:
     parser.add_argument("--name", default="ab", help="Run name, used in the output filenames.")
     args = parser.parse_args()
 
-    specs = [s.strip() for s in args.models.split(",") if s.strip()]
-    # Checked before any paid call: a typo found mid-run would abort after the
-    # earlier models had been paid for, with no report written.
-    for spec in specs:
-        try:
-            provider, _ = parse_model_spec(spec)
-        except ValueError as exc:
-            parser.error(str(exc))
-        if provider not in SUPPORTED_PROVIDERS:
-            parser.error(
-                f"Unknown provider {provider!r} in {spec!r}; "
-                f"expected one of {', '.join(SUPPORTED_PROVIDERS)}."
-            )
+    specs = validate_specs(parser, args.models)
     claims = load_claims(args.claims, args.limit)
     pricing = json.loads(args.pricing.read_text()) if args.pricing.exists() else {}
 
@@ -155,6 +166,7 @@ def main() -> None:
         "date": date.today().isoformat(),
         "claims": len(claims),
         "label_counts": label_counts,
+        "claims_file": args.claims.name,
         "repeats": args.repeats,
     }
 

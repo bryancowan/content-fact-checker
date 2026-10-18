@@ -125,7 +125,7 @@ content-fact-checker/
 │   ├── claims.py           # Claim extraction from text/URL/image
 │   ├── checker.py          # Fact-check pipeline
 │   └── rate_limiter.py     # Client-side request rate limiting
-├── evals/                  # Model A/B test: labeled claims, runner, scoring, results
+├── evals/                  # Model A/B tests: labeled claims and images, runners, scoring, results
 ├── cli.py                  # Command-line interface
 ├── web_app.py              # Streamlit web interface
 ├── requirements.txt        # Python dependencies

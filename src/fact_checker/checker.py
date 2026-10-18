@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from .claims import extract_claims_from_image, extract_claims_from_text, extract_claims_from_url
-from .llm import call_llm_chat
+from .llm import LLMTruncatedError, call_llm_chat
 from .search import build_evidence_context, search_web
 
 _VERDICT_RESPONSE_FORMAT = {
@@ -26,6 +26,15 @@ _VERDICT_RESPONSE_FORMAT = {
 }
 
 
+def _error_result(claim: str, problem: str) -> "ClaimResult":
+    return ClaimResult(
+        claim=claim,
+        verdict="error",
+        reason=f"{problem} No verdict could be reached for this claim; try checking it again.",
+        parse_failed=True,
+    )
+
+
 def _filter_to_evidence_urls(candidates: list, evidence_urls: set[str]) -> list[str]:
     """Keep only cited URLs that actually appeared in the search evidence.
 
@@ -45,11 +54,14 @@ def _filter_to_evidence_urls(candidates: list, evidence_urls: set[str]) -> list[
 @dataclass
 class ClaimResult:
     claim: str
-    verdict: str  # "true", "false", or "uncertain"
+    # "true", "false" or "uncertain" -- the model's judgement -- or "error" when no
+    # usable answer came back. "error" is kept apart from "uncertain" so a technical
+    # failure is never shown to the user as the model being unsure.
+    verdict: str
     reason: str
     sources: list[str] = field(default_factory=list)
-    # The model's output wasn't valid JSON, so verdict is the "uncertain" fallback
-    # rather than the model's answer. Evals count these apart from wrong verdicts.
+    # The reply was cut off or wasn't valid JSON, so there is no model verdict
+    # (verdict is "error"). Evals count these apart from wrong verdicts.
     parse_failed: bool = False
 
 
@@ -90,22 +102,19 @@ def judge_claim(claim: str, results: list[dict]) -> ClaimResult:
     {evidence_context}
     """)
 
-    raw = call_llm_chat(
-        user_content=user_prompt,
-        system_content=system_prompt,
-        response_format=_VERDICT_RESPONSE_FORMAT,
-    )
+    try:
+        raw = call_llm_chat(
+            user_content=user_prompt,
+            system_content=system_prompt,
+            response_format=_VERDICT_RESPONSE_FORMAT,
+        )
+    except LLMTruncatedError:
+        return _error_result(claim, "The model's reply was cut off before it finished.")
 
-    parse_failed = False
     try:
         data = json.loads(raw.strip())
     except Exception:
-        parse_failed = True
-        data = {
-            "verdict": "uncertain",
-            "reason": "Could not parse model output.",
-            "top_sources": [],
-        }
+        return _error_result(claim, "The model's reply wasn't in the expected format.")
 
     verdict = str(data.get("verdict", "uncertain")).lower()
     if verdict not in {"true", "false", "uncertain"}:
@@ -121,7 +130,6 @@ def judge_claim(claim: str, results: list[dict]) -> ClaimResult:
         verdict=verdict,
         reason=data.get("reason", ""),
         sources=top_sources,
-        parse_failed=parse_failed,
     )
 
 

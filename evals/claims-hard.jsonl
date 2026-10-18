@@ -1,0 +1,40 @@
+{"id": "n01", "claim": "The Great Pyramid of Giza was originally about 146 meters tall.", "label": "true", "category": "numeric"}
+{"id": "n02", "claim": "The Great Pyramid of Giza was originally about 180 meters tall.", "label": "false", "category": "numeric"}
+{"id": "n03", "claim": "The Golden Gate Bridge opened to traffic in 1937.", "label": "true", "category": "numeric"}
+{"id": "n04", "claim": "The Golden Gate Bridge opened to traffic in 1935.", "label": "false", "category": "numeric"}
+{"id": "n05", "claim": "The human genome contains roughly 3 billion base pairs.", "label": "true", "category": "numeric"}
+{"id": "n06", "claim": "The human genome contains roughly 30 billion base pairs.", "label": "false", "category": "numeric"}
+{"id": "n07", "claim": "The Suez Canal opened in 1869.", "label": "true", "category": "numeric"}
+{"id": "n08", "claim": "The Suez Canal opened in 1859.", "label": "false", "category": "numeric"}
+{"id": "n09", "claim": "Mount Fuji is 3,776 meters tall.", "label": "true", "category": "numeric"}
+{"id": "n10", "claim": "Mount Fuji is 3,976 meters tall.", "label": "false", "category": "numeric"}
+{"id": "n11", "claim": "The Hundred Years' War lasted 116 years.", "label": "true", "category": "numeric"}
+{"id": "n12", "claim": "The Hundred Years' War lasted exactly 100 years.", "label": "false", "category": "numeric"}
+{"id": "n13", "claim": "Light takes about 8 minutes to travel from the Sun to Earth.", "label": "true", "category": "numeric"}
+{"id": "n14", "claim": "Light takes about 12 minutes to travel from the Sun to Earth.", "label": "false", "category": "numeric"}
+{"id": "c01", "claim": "Marie Curie won Nobel Prizes in Physics and Chemistry, and also one in Medicine.", "label": "false", "category": "compound"}
+{"id": "c02", "claim": "During Apollo 11, Neil Armstrong and Buzz Aldrin walked on the Moon, and Michael Collins joined them on the surface.", "label": "false", "category": "compound"}
+{"id": "c03", "claim": "Canberra is the capital of Australia and also its largest city.", "label": "false", "category": "compound"}
+{"id": "c04", "claim": "The Amazon rainforest spans nine countries, and most of it lies in Peru.", "label": "false", "category": "compound"}
+{"id": "c05", "claim": "Alexander Fleming discovered penicillin in 1928 and shared the 1945 Nobel Prize in Physiology or Medicine for it.", "label": "true", "category": "compound"}
+{"id": "c06", "claim": "The Berlin Wall fell in 1989, and Germany was formally reunified in 1990.", "label": "true", "category": "compound"}
+{"id": "m01", "claim": "Vikings wore horned helmets in battle.", "label": "false", "category": "misconception"}
+{"id": "m02", "claim": "Bats are blind.", "label": "false", "category": "misconception"}
+{"id": "m03", "claim": "Napoleon Bonaparte was unusually short for a Frenchman of his time.", "label": "false", "category": "misconception"}
+{"id": "m04", "claim": "Different regions of the tongue are responsible for tasting sweet, sour, salty and bitter.", "label": "false", "category": "misconception"}
+{"id": "m05", "claim": "Eating sugar makes children hyperactive.", "label": "false", "category": "misconception"}
+{"id": "m06", "claim": "Cracking your knuckles causes arthritis.", "label": "false", "category": "misconception"}
+{"id": "m07", "claim": "The Sahara is the largest desert in the world.", "label": "false", "category": "misconception"}
+{"id": "m08", "claim": "Mount Everest is the tallest mountain on Earth when measured from base to summit.", "label": "false", "category": "misconception"}
+{"id": "t01", "claim": "The University of Oxford is older than the Aztec Empire.", "label": "true", "category": "counterintuitive"}
+{"id": "t02", "claim": "Cleopatra lived closer in time to the Moon landing than to the construction of the Great Pyramid of Giza.", "label": "true", "category": "counterintuitive"}
+{"id": "t03", "claim": "Wombats produce cube-shaped droppings.", "label": "true", "category": "counterintuitive"}
+{"id": "t04", "claim": "A day on Venus is longer than a year on Venus.", "label": "true", "category": "counterintuitive"}
+{"id": "t05", "claim": "Botanically, bananas are berries but strawberries are not.", "label": "true", "category": "counterintuitive"}
+{"id": "t06", "claim": "Sharks are older than trees.", "label": "true", "category": "counterintuitive"}
+{"id": "t07", "claim": "Octopuses have three hearts.", "label": "true", "category": "counterintuitive"}
+{"id": "u01", "claim": "Nikola Tesla invented radio.", "label": "uncertain", "category": "contested"}
+{"id": "u02", "claim": "Jack the Ripper was Aaron Kosminski.", "label": "uncertain", "category": "contested"}
+{"id": "u03", "claim": "D. B. Cooper survived his 1971 parachute jump.", "label": "uncertain", "category": "contested"}
+{"id": "u04", "claim": "Stonehenge was built to function as an astronomical calendar.", "label": "uncertain", "category": "contested"}
+{"id": "u05", "claim": "Dark matter consists of weakly interacting massive particles (WIMPs).", "label": "uncertain", "category": "contested"}
