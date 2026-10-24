@@ -3,5 +3,6 @@ openai==3.28.0
 parallel-web==1.2.0
 python-dotenv==1.2.2
 requests==2.34.2
+certifi>=2026.10.19
 beautifulsoup4==4.15.0
 streamlit==1.61.1
