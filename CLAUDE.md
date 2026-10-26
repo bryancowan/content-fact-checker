@@ -140,7 +140,9 @@ model to treat image text as data, never instructions.
 ## CI
 
 `.github/workflows/ci.yml` runs `ruff check .` and `pytest -q` on push to `main` and on
-every PR. The suite is offline and needs no secrets.
+every PR, on Python 3.13 and 3.14 (production runs 3.14). The suite is offline and needs no
+secrets. Branch protection requires a check named `test`, which is the 3.13 leg; the 3.14 leg
+reports as `test (3.14)` and isn't required. Don't rename the job or `main` stops accepting PRs.
 
 ## Debugging third-party API failures
 
