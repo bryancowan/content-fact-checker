@@ -24,6 +24,15 @@ python evals/run_image_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotr
 # Uses: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
 ```
 
+## Render settings
+
+The Render service was created by hand and is not Blueprint-managed, so `render.yaml` is a
+record, not the source of truth: Render ignores it and uses the dashboard settings (build
+command, start command, Python version, env vars). Change a setting in the dashboard
+(Settings), then mirror it in `render.yaml` in the same PR. Saving a build-command change
+in the dashboard starts a deploy. Production runs Python 3.14 while CI and local venvs use
+3.13; the suite passes on both.
+
 ## Environment Setup
 
 Copy `.env.example` to `.env` and populate the keys:
