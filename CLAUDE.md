@@ -30,8 +30,8 @@ The Render service was created by hand and is not Blueprint-managed, so `render.
 record, not the source of truth: Render ignores it and uses the dashboard settings (build
 command, start command, Python version, env vars). Change a setting in the dashboard
 (Settings), then mirror it in `render.yaml` in the same PR. Saving a build-command change
-in the dashboard starts a deploy. Production runs Python 3.14 while CI and local venvs use
-3.13; the suite passes on both.
+in the dashboard starts a deploy. Production runs Python 3.14; CI tests 3.13 and 3.14, and
+local venvs use 3.13.
 
 ## Environment Setup
 
@@ -149,7 +149,9 @@ model to treat image text as data, never instructions.
 ## CI
 
 `.github/workflows/ci.yml` runs `ruff check .` and `pytest -q` on push to `main` and on
-every PR. The suite is offline and needs no secrets.
+every PR, on Python 3.13 and 3.14 (production runs 3.14). The suite is offline and needs no
+secrets. Branch protection requires a check named `test`, which is the 3.13 leg; the 3.14 leg
+reports as `test (3.14)` and isn't required. Don't rename the job or `main` stops accepting PRs.
 
 ## Debugging third-party API failures
 
