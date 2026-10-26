@@ -1,8 +1,12 @@
+# This service was created by hand in the Render dashboard and is NOT Blueprint-managed, so Render
+# ignores this file: the dashboard settings are what run. When you change the build command, start
+# command, Python version or env vars here, change them in the dashboard too (Settings), and keep
+# the two in step. The values below mirror what was running on 2026-10-26.
 services:
   - type: web
     name: content-fact-checker
     runtime: python
-    pythonVersion: "3.13"
+    pythonVersion: "3.14"
     buildCommand: pip install -r requirements.txt && python scripts/patch_streamlit_favicon.py
     startCommand: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
     envVars:
