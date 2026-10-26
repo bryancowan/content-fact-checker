@@ -30,8 +30,8 @@ The Render service was created by hand and is not Blueprint-managed, so `render.
 record, not the source of truth: Render ignores it and uses the dashboard settings (build
 command, start command, Python version, env vars). Change a setting in the dashboard
 (Settings), then mirror it in `render.yaml` in the same PR. Saving a build-command change
-in the dashboard starts a deploy. Production runs Python 3.14 while CI and local venvs use
-3.13; the suite passes on both.
+in the dashboard starts a deploy. Production runs Python 3.14; CI tests 3.13 and 3.14, and
+local venvs use 3.13.
 
 ## Environment Setup
 
