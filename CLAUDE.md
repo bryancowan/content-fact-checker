@@ -79,6 +79,17 @@ is a deep mint rather than the site's light pill. Streamlit also doesn't expose 
 theme to CSS, so the dark link underline follows `prefers-color-scheme` (the default
 "System" setting) and not a manual theme override.
 
+## Favicon
+
+The tab icon is the 🔍 emoji, shipped as `static/favicon-magnifier.png` (Noto Emoji, Apache 2.0;
+license in `static/LICENSE-noto-emoji.txt`). The repo is public, so don't put personal photos
+here. `page_icon` in `web_app.py` points at it, but Streamlit only applies `page_icon` after
+the websocket connects, and its HTML ships `<link rel="shortcut icon" href="./favicon.png">`
+(the crown). `scripts/patch_streamlit_favicon.py` rewrites that link in the installed package,
+and `render.yaml` runs it after `pip install`. It exits non-zero if a Streamlit upgrade changes
+the link, which fails the build. For local runs, run it once with
+`./.venv/bin/python scripts/patch_streamlit_favicon.py` (and again after reinstalling Streamlit).
+
 ## Testing
 
 `pytest` covers `url_guard.py` (SSRF guard), `rate_limiter.py` (sliding-window behavior), `llm.py` (message/content-block construction), `claims.py` and `checker.py` (structured-output JSON parsing and pipeline orchestration), and `search.py` (Parallel API call shape and evidence formatting). All of it runs offline — `tests/conftest.py` stubs the Cerebras/OpenAI/Parallel SDK modules, and individual tests monkeypatch `call_llm_chat`/`search_web`/the client getters rather than hitting the network.

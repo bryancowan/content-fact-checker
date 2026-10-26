@@ -12,7 +12,11 @@ import streamlit as st
 from fact_checker import ClaimResult, fact_check_image, fact_check_text, fact_check_url
 from fact_checker.display import escape_dollars
 
-st.set_page_config(page_title="Content Fact-Checker", page_icon="🔍", layout="wide")
+st.set_page_config(
+    page_title="Content Fact-Checker",
+    page_icon="/app/static/favicon-magnifier.png",
+    layout="wide",
+)
 
 # Colors and fonts live in .streamlit/config.toml. This covers what the theme can't:
 # bryancowan.com's mint link underline and ink-colored active tab.
