@@ -150,8 +150,10 @@ model to treat image text as data, never instructions.
 
 `.github/workflows/ci.yml` runs `ruff check .` and `pytest -q` on push to `main` and on
 every PR, on Python 3.13 and 3.14 (production runs 3.14). The suite is offline and needs no
-secrets. Branch protection requires a check named `test`, which is the 3.13 leg; the 3.14 leg
-reports as `test (3.14)` and isn't required. Don't rename the job or `main` stops accepting PRs.
+secrets. Branch protection on `main` requires two checks: `test` (the 3.13 leg, whose name the
+job's `name:` expression pins) and `test (3.14)`. Don't rename the job or `main` stops accepting
+PRs. If production's Python version changes, change the matrix, the `name:` expression and the
+required checks (repo Settings → Branches, or `gh api` on `branches/main/protection`) together.
 
 ## Debugging third-party API failures
 
