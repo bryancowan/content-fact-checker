@@ -137,6 +137,20 @@ def test_run_attempt_records_an_api_failure_instead_of_raising(monkeypatch):
     assert "empty content" in attempt.error
 
 
+def test_run_attempt_gives_the_model_the_requested_reasoning_effort(monkeypatch):
+    seen = []
+
+    def fake_extract(image_bytes, mime_type, max_claims):
+        seen.append(llm._override.get())
+        return []
+
+    monkeypatch.setattr(run_image_ab, "extract_claims_from_image", fake_extract)
+
+    run_image_ab.run_attempt("openrouter:minimax/minimax-m3.1-flash", ENTRY, b"png", {}, "low")
+
+    assert seen == [("openrouter", "minimax/minimax-m3.1-flash", "low")]
+
+
 def test_a_reply_cut_off_twice_is_an_error_and_not_also_unparsed(monkeypatch):
     """The cut-off text isn't valid JSON, but counting it as unparsed too double-counts it."""
     _install(monkeypatch, '{"claims": ["Mount F', finish_reason="length")

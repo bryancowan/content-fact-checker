@@ -73,3 +73,31 @@ def test_old_timestamps_age_out(monkeypatch):
     assert waited == 0.0
     assert sleep_calls == []
     assert len(limiter.timestamps) == 1
+
+
+def test_concurrent_callers_never_exceed_the_limit(monkeypatch):
+    """An eval runs several models through the one shared limiter at once."""
+    import threading
+
+    clock, sleep_calls = _install_fake_clock(monkeypatch)
+    limiter = RateLimiter(max_requests_per_minute=5)
+    released = []  # when each caller was let through
+    record = threading.Lock()
+
+    def call():
+        limiter.wait_if_needed()
+        with record:
+            released.append(clock.now)
+
+    threads = [threading.Thread(target=call) for _ in range(20)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    stamps = sorted(released)
+    assert len(stamps) == 20
+    # No 60 s window ever holds more than 5 requests: each is at least a minute
+    # after the one five places before it.
+    assert all(stamps[i + 5] - stamps[i] >= 60 for i in range(len(stamps) - 5))
+    assert sleep_calls

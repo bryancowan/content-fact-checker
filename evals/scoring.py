@@ -22,6 +22,7 @@ class Attempt:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
+    served_by: str | None = None  # the backend OpenRouter routed to, when it says
 
     @property
     def correct(self) -> bool:
@@ -133,6 +134,11 @@ def summarize(attempts: list[Attempt]) -> dict:
             tally["attempts"] += 1
             tally["correct"] += a.correct
 
+    served_by: dict[str, int] = {}
+    for a in attempts:
+        if a.served_by:
+            served_by[a.served_by] = served_by.get(a.served_by, 0) + 1
+
     latencies = [a.latency_s for a in attempts if a.latency_s is not None]
     costs = [a.cost_usd for a in attempts if a.cost_usd is not None]
     cost_known = len(costs) == total and total > 0
@@ -144,6 +150,10 @@ def summarize(attempts: list[Attempt]) -> dict:
         "accuracy": _ratio(len(correct), total),
         "parse_failures": sum(a.parse_failed for a in attempts),
         "errors": sum(a.error is not None for a in attempts),
+        # Attempts that came back with a usable verdict, right or wrong: how well the
+        # model does the task as specified, apart from whether it judges correctly.
+        "completion_rate": _ratio(len(answered), total),
+        "served_by": served_by,
         "per_class": per_class,
         "confusion": confusion,
         "categories": categories,
@@ -183,32 +193,38 @@ def render_markdown(summaries: dict[str, dict], meta: dict) -> str:
         "",
         f"- Claims: {meta['claims']} ({meta['label_counts']}), from `{meta['claims_file']}`",
         f"- Repeats per claim: {meta['repeats']}",
-        "- Reasoning effort, sampling and prompts are each provider's defaults from "
-        "`src/fact_checker/config.py`",
+        f"- Reasoning effort: {meta.get('reasoning_effort') or 'each provider default'}, sent "
+        "to every model in its provider's own form. Whether a model honours it varies, so "
+        "compare the thinking tokens column.",
+        "- Prompts are identical; sampling is each model's own default on OpenRouter.",
         "- Every model saw the same cached web evidence per claim.",
         "",
         "## Headline",
         "",
-        "| Model | Accuracy | Unparsed | Errors | Consistency | Latency mean / p95 | "
-        "Cost per 1k claims | Cost per correct |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Model | Accuracy | Completed | Unparsed | Errors | Consistency | "
+        "Latency mean / p95 | Thinking tokens | Cost per 1k claims | Cost per correct |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for m in models:
         s = summaries[m]
         lines.append(
             f"| `{m}` | {pct(s['accuracy'])} ({s['correct']}/{s['attempts']}) "
+            f"| {pct(s['completion_rate'])} "
             f"| {s['parse_failures']} | {s['errors']} | {pct(s['consistency'])} "
             f"| {fmt(s['latency_mean_s'], '.1f', suffix='s')} / "
             f"{fmt(s['latency_p95_s'], '.1f', suffix='s')} "
+            f"| {fmt(s['reasoning_tokens_mean'], '.0f')} "
             f"| {fmt(s['cost_per_1k_claims_usd'], '.2f', prefix='$')} "
             f"| {fmt(s['cost_per_correct_usd'], '.5f', prefix='$')} |"
         )
 
     lines += [
         "",
-        "Accuracy counts failed calls and unparseable answers as wrong. Consistency is the "
-        "share of claims where every repeat gave the same result. Cost is n/a when a "
-        "provider reports no cost and `evals/pricing.json` has no price for it.",
+        "Accuracy counts failed calls and unparseable answers as wrong. Completed is the "
+        "share of attempts that returned a usable verdict, right or wrong. Consistency is "
+        "the share of claims where every repeat gave the same result. Thinking tokens are "
+        "the mean reasoning tokens per call. Cost is n/a when a provider reports no cost "
+        "and `evals/pricing.json` has no price for it.",
         "",
         "## Tokens per call (mean)",
         "",
@@ -235,6 +251,22 @@ def render_markdown(summaries: dict[str, dict], meta: dict) -> str:
                 f"| `{m}` | {verdict} | {pct(c['precision'])} | {pct(c['recall'])} "
                 f"| {c['predicted']} | {c['actual']} |"
             )
+
+    mixes = {m: summaries[m]["served_by"] for m in models if summaries[m]["served_by"]}
+    if mixes:
+        lines += [
+            "",
+            "## Backends that served each model (OpenRouter)",
+            "",
+            "One model can be served by several backends at very different prices, so a "
+            "model's cost depends on which ones it landed on.",
+            "",
+        ]
+        for m, mix in mixes.items():
+            parts = ", ".join(
+                f"{name} {n}" for name, n in sorted(mix.items(), key=lambda kv: -kv[1])
+            )
+            lines.append(f"- `{m}`: {parts}")
 
     category_names = sorted({c for m in models for c in summaries[m]["categories"]})
     if category_names:

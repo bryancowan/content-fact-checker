@@ -3,10 +3,10 @@
 
 Each image in evals/images.jsonl lists the claims it should yield and, for the
 prompt-injection image, a marker that must not come back as a claim. Only vision
-models belong here (not reflection/beam-1.0, which is text-only); one without
-vision support records errors rather than stopping the run.
+models belong here; one without vision support records errors rather than stopping
+the run.
 
-    python evals/run_image_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl
+    python evals/run_image_ab.py --models @evals/models.txt --reasoning-effort high --workers 6
 """
 
 import argparse
@@ -26,7 +26,13 @@ from evals.image_scoring import (  # noqa: E402
     score_claims,
     summarize,
 )
-from evals.run_ab import DEFAULT_PRICING, RESULTS, validate_specs  # noqa: E402
+from evals.run_ab import (  # noqa: E402
+    DEFAULT_PRICING,
+    REASONING_EFFORTS,
+    RESULTS,
+    run_per_model,
+    validate_specs,
+)
 from evals.scoring import parse_model_spec, price_tokens, total_usage  # noqa: E402
 from fact_checker.claims import extract_claims_from_image  # noqa: E402
 from fact_checker.llm import LLMCallError, llm_override, record_llm_calls  # noqa: E402
@@ -36,10 +42,16 @@ DEFAULT_MANIFEST = EVALS / "images.jsonl"
 MAX_CLAIMS = 8
 
 
-def run_attempt(spec: str, entry: dict, image_bytes: bytes, pricing: dict) -> ImageAttempt:
+def run_attempt(
+    spec: str,
+    entry: dict,
+    image_bytes: bytes,
+    pricing: dict,
+    reasoning_effort: str | None = None,
+) -> ImageAttempt:
     provider, model = parse_model_spec(spec)
     attempt = ImageAttempt(model=spec, image_id=entry["id"], expected=len(entry["expected"]))
-    with llm_override(provider, model), record_llm_calls() as calls:
+    with llm_override(provider, model, reasoning_effort), record_llm_calls() as calls:
         try:
             attempt.claims = extract_claims_from_image(image_bytes, "image/png", MAX_CLAIMS)
         except LLMCallError as exc:
@@ -55,6 +67,7 @@ def run_attempt(spec: str, entry: dict, image_bytes: bytes, pricing: dict) -> Im
         attempt.completion_tokens = usage["completion_tokens"]
         attempt.reasoning_tokens = usage["reasoning_tokens"]
         attempt.cost_usd = usage["cost_usd"]
+        attempt.served_by = calls[-1].served_by
         if attempt.cost_usd is None:
             attempt.cost_usd = price_tokens(
                 usage["prompt_tokens"], usage["completion_tokens"], pricing.get(spec)
@@ -67,8 +80,16 @@ def run_attempt(spec: str, entry: dict, image_bytes: bytes, pricing: dict) -> Im
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--models", required=True, help="Comma-separated provider:model specs.")
+    parser.add_argument(
+        "--models", required=True, help="Comma-separated provider:model specs, or @file."
+    )
     parser.add_argument("--repeats", type=int, default=3, help="Runs per image per model.")
+    parser.add_argument(
+        "--reasoning-effort",
+        choices=REASONING_EFFORTS,
+        help="Give every model this reasoning effort (default: each provider's own setting).",
+    )
+    parser.add_argument("--workers", type=int, default=1, help="Models to run at once.")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING)
     parser.add_argument("--name", default="images", help="Run name, used in the output filenames.")
@@ -79,20 +100,27 @@ def main() -> None:
     images = {e["id"]: (args.manifest.parent / "images" / e["file"]).read_bytes() for e in entries}
     pricing = json.loads(args.pricing.read_text()) if args.pricing.exists() else {}
 
-    attempts: list[ImageAttempt] = []
-    for spec in specs:
-        print(f"\n{spec}")
+    def run_model(spec: str) -> list[ImageAttempt]:
+        done = []
         for repeat in range(args.repeats):
             for entry in entries:
-                attempt = run_attempt(spec, entry, images[entry["id"]], pricing)
-                attempts.append(attempt)
+                attempt = run_attempt(
+                    spec, entry, images[entry["id"]], pricing, args.reasoning_effort
+                )
+                done.append(attempt)
                 print(
-                    f"  [{repeat + 1}/{args.repeats}] {entry['id']}: "
+                    f"{spec} [{repeat + 1}/{args.repeats}] {entry['id']}: "
                     f"found {attempt.found}/{attempt.expected}, extras {attempt.extras}"
                     + (" INJECTED" if attempt.injected else "")
                     + (" (unparsed)" if attempt.parse_failed else "")
-                    + (f" {attempt.error}" if attempt.error else "")
+                    + (f" {attempt.error}" if attempt.error else ""),
+                    flush=True,
                 )
+        return done
+
+    attempts: list[ImageAttempt] = [
+        a for done in run_per_model(specs, run_model, args.workers) for a in done
+    ]
 
     summaries = {s: summarize([a for a in attempts if a.model == s]) for s in specs}
     meta = {
@@ -100,6 +128,7 @@ def main() -> None:
         "images": len(entries),
         "manifest": args.manifest.name,
         "repeats": args.repeats,
+        "reasoning_effort": args.reasoning_effort,
     }
     stem = f"{meta['date']}-{args.name}"
     RESULTS.mkdir(exist_ok=True)

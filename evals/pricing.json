@@ -1,8 +1,18 @@
 {
   "_comment": "USD per 1M tokens. Used only when the provider reports no cost (OpenRouter reports usage.cost, so it never needs an entry). Reasoning tokens are billed as completion tokens. null = unknown, and cost shows as n/a. Cached input is not discounted here, so cost is slightly overstated when the provider caches the prompt.",
   "openai:gpt-6-luna": {
-    "input_per_m": 0.10,
-    "output_per_m": 0.50,
+    "input_per_m": 0.1,
+    "output_per_m": 0.5,
     "_source": "https://developers.openai.com/api/docs/pricing, standard rates, checked 2026-10-17. Requests over 272K input tokens cost more; ours are about 2K."
+  },
+  "openai:gpt-6.1-terra": {
+    "input_per_m": 1.0,
+    "output_per_m": 5.0,
+    "_source": "https://developers.openai.com/api/docs/pricing, standard short-context rates, checked 2026-11-01. Requests over 272K input tokens cost more; ours are about 2K."
+  },
+  "cerebras:qwen-3.8-27b": {
+    "input_per_m": 0.99,
+    "output_per_m": 1.49,
+    "_source": "context/qwen-3.8-27b_hosted_on_cerebras.md (Cerebras paid Developer tier). Check Cerebras's pricing page before trusting a comparison."
   }
 }

@@ -12,13 +12,15 @@ pip install -r requirements.txt
 streamlit run web_app.py
 
 # A/B test models on the verdict step (live API calls; costs money). Needs PARALLEL_API_KEY
-# plus the key for each provider you name. Writes a report to evals/results/.
-python evals/run_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl --repeats 3
+# plus the key for each provider you name. Writes a report to evals/results/. The models
+# are listed in evals/models.txt (provider:model per line); --reasoning-effort gives every
+# model the same setting and --workers runs that many models at once.
+python evals/run_ab.py --models @evals/models.txt --reasoning-effort high --workers 6
 # Same, on the harder set (numeric near-misses, half-true compounds, misconceptions,
 # counterintuitive truths, contested claims); the report adds accuracy by category.
-python evals/run_ab.py --models ... --claims evals/claims-hard.jsonl --name hard
+python evals/run_ab.py --models @evals/models.txt --claims evals/claims-hard.jsonl --name hard
 # Image claim extraction (vision models only): recall, extras, prompt-injection resistance.
-python evals/run_image_ab.py --models openai:gpt-6-luna,openrouter:nvidia/nemotron-3.5-super-vl
+python evals/run_image_ab.py --models @evals/models.txt --reasoning-effort high --workers 6
 
 # Deploy to Render (config in render.yaml)
 # Uses: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
@@ -63,8 +65,8 @@ Cited `top_sources` are filtered against the URLs the search actually returned (
 **Key modules:**
 - `src/fact_checker/config.py` — API keys, provider (`LLM_PROVIDER`) and model name (`gpt-6-luna` / `qwen-3.8-27b`), reasoning/token settings, rate limit, retry and image constraints. Most values are overridable via env vars or Streamlit secrets, so a model deprecation doesn't require a code change. Settings renamed from `CEREBRAS_*` to `LLM_*` still read the old name as a fallback.
 - `src/fact_checker/clients.py` — lazy singleton clients for OpenAI, Cerebras, OpenRouter (the OpenAI SDK on OpenRouter's base URL) and Parallel APIs; `get_llm_client()` picks the chat client for the configured provider
-- `src/fact_checker/rate_limiter.py` — sliding-window rate limiter; defaults to 300 req/min (set `LLM_REQUESTS_PER_MIN=5` on the Cerebras free trial)
-- `src/fact_checker/llm.py` — `call_llm_chat()` (returns the text) over `call_llm_chat_with_metrics()` (adds latency, tokens, cost); `llm_override()` / `record_llm_calls()` context managers switch provider/model and collect metrics for the calls inside them without threading parameters through `claims.py`/`checker.py` (used by `evals/`); accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
+- `src/fact_checker/rate_limiter.py` — sliding-window rate limiter, thread-safe so an eval can run several models at once; defaults to 300 req/min (set `LLM_REQUESTS_PER_MIN=5` on the Cerebras free trial)
+- `src/fact_checker/llm.py` — `call_llm_chat()` (returns the text) over `call_llm_chat_with_metrics()` (adds latency, tokens, cost); `llm_override()` / `record_llm_calls()` context managers switch provider/model (and optionally reasoning effort) and collect metrics, including which backend served each call, for the calls inside them without threading parameters through `claims.py`/`checker.py` (used by `evals/`); accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
 - `src/fact_checker/search.py` — `search_web()` wraps Parallel API; `build_evidence_context()` formats results for the LLM prompt (unaffected by image support — evidence search is always text-based)
 - `src/fact_checker/display.py` — `escape_dollars()`; Streamlit renders `$...$` as LaTeX, so every model- or user-supplied string passed to `st.markdown`/`st.caption` in `web_app.py` goes through it (prices otherwise lose their dollar signs). `st.text` and the CLI don't need it.
 - `src/fact_checker/claims.py` — LLM-based claim extraction from text, URL, or image (PNG/JPEG only)
@@ -117,9 +119,14 @@ one place that handles it:
   sent at the default effort. `gpt-6-luna`'s own default effort is `medium`; this app
   pins `high`.
 - **OpenRouter**: effort goes in `extra_body={"reasoning": {"effort": ...}}` (OpenRouter
-  documents no top-level `reasoning_effort`), `temperature`/`top_p` are always sent, and
-  `reasoning_format` is not. OpenRouter returns the trace in `message.reasoning`, so
-  `content` stays pure JSON. Responses carry `usage.cost` without any opt-in parameter.
+  documents no top-level `reasoning_effort`), together with `provider.require_parameters`
+  so routing only picks backends that honour `response_format` and `reasoning`.
+  `temperature`/`top_p` and `reasoning_format` are not sent: Claude Haiku 5.5 and the GPT-6
+  family reject sampling parameters, and with `require_parameters` OpenRouter then finds no
+  endpoint (a 404), so each model runs at its own default sampling. OpenRouter returns the
+  trace in `message.reasoning`, so `content` stays pure JSON. Responses carry `usage.cost`
+  without any opt-in parameter, and `provider` names the backend that served the call
+  (one model can be served by several at very different prices).
 - **Cerebras (`qwen-3.8-27b`)**: sends `temperature`, `top_p`, and `reasoning_format`
   pinned to `"parsed"`, so the reasoning trace lands in `message.reasoning` and
   `message.content` stays pure JSON for the structured-output parsers.

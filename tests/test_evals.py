@@ -183,3 +183,45 @@ def test_total_usage_sums_a_retry_and_refuses_partial_totals():
 
     second.cost_usd = None
     assert scoring.total_usage([first, second])["cost_usd"] is None
+
+
+def test_completion_rate_is_the_share_with_a_usable_verdict_right_or_wrong():
+    attempts = [
+        _attempt("true", "true"),
+        _attempt("true", "false"),  # wrong, but it did the task
+        _attempt("true", "error", parse_failed=True),
+        _attempt("true", None, error="down"),
+    ]
+
+    summary = scoring.summarize(attempts)
+
+    assert summary["completion_rate"] == 0.5
+    assert summary["accuracy"] == 0.25
+
+
+def test_the_report_shows_thinking_tokens_completion_and_the_backends_that_served():
+    summaries = {
+        "openrouter:a": scoring.summarize(
+            [
+                _attempt("true", "true", served_by="DeepInfra", reasoning_tokens=100),
+                _attempt("true", "true", served_by="DeepInfra", reasoning_tokens=300),
+                _attempt("true", "true", served_by="Together", reasoning_tokens=200),
+            ]
+        ),
+        "openai:b": scoring.summarize([_attempt("true", "true", reasoning_tokens=50)]),
+    }
+    meta = {
+        "date": "2026-11-01",
+        "claims": 3,
+        "label_counts": "3 true",
+        "claims_file": "claims.jsonl",
+        "repeats": 1,
+        "reasoning_effort": "high",
+    }
+
+    report = scoring.render_markdown(summaries, meta)
+
+    assert "Reasoning effort: high" in report
+    assert "| Completed |" in report and "Thinking tokens" in report
+    assert "- `openrouter:a`: DeepInfra 2, Together 1" in report
+    assert "`openai:b`:" not in report.split("Backends that served")[1]  # none reported
