@@ -22,6 +22,9 @@ python evals/run_ab.py --models @evals/models.txt --claims evals/claims-hard.jso
 # Image claim extraction (vision models only): recall, extras, prompt-injection resistance.
 python evals/run_image_ab.py --models @evals/models.txt --reasoning-effort high --workers 6
 
+# Re-check the OpenRouter backend allowlist (US/Europe only) against OpenRouter's location data
+python scripts/check_openrouter_providers.py
+
 # Deploy to Render (config in render.yaml)
 # Uses: streamlit run web_app.py --server.headless true --server.address 0.0.0.0 --server.port $PORT
 ```
@@ -126,7 +129,12 @@ one place that handles it:
   endpoint (a 404), so each model runs at its own default sampling. OpenRouter returns the
   trace in `message.reasoning`, so `content` stays pure JSON. Responses carry `usage.cost`
   without any opt-in parameter, and `provider` names the backend that served the call
-  (one model can be served by several at very different prices).
+  (one model can be served by several at very different prices). Requests are limited to
+  US- and Europe-based backends with `provider.only` set from
+  `config.OPENROUTER_ALLOWED_PROVIDERS` (override with the env var of the same name): OpenRouter
+  otherwise routes to any backend, including ones run by Chinese companies. A model with no
+  allowed backend fails with a 404 instead of falling back. The list is company location, not a
+  guarantee of where a request runs; see the comment in `config.py` for its limits.
 - **Cerebras (`qwen-3.8-27b`)**: sends `temperature`, `top_p`, and `reasoning_format`
   pinned to `"parsed"`, so the reasoning trace lands in `message.reasoning` and
   `message.content` stays pure JSON for the structured-output parsers.

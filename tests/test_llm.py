@@ -250,9 +250,13 @@ def test_openrouter_sends_reasoning_object_and_no_sampling_params(monkeypatch):
     [call] = fake_client.chat.completions.calls
     assert call["extra_body"] == {
         "reasoning": {"effort": "high"},
-        # Without this OpenRouter may route to a backend that ignores the JSON
-        # schema, which would only show up later as a parse failure.
-        "provider": {"require_parameters": True},
+        "provider": {
+            # Without this OpenRouter may route to a backend that ignores the JSON
+            # schema, which would only show up later as a parse failure.
+            "require_parameters": True,
+            # Only US and European backends.
+            "only": list(config.OPENROUTER_ALLOWED_PROVIDERS),
+        },
     }
     # Claude Haiku 5.5 and the GPT-6 family reject these; with require_parameters
     # OpenRouter then finds no endpoint (404), so each model uses its own defaults.

@@ -41,10 +41,69 @@ def _get_int(key: str, default: int, minimum: int = 1, legacy_key: str | None = 
     return value if value >= minimum else default
 
 
+def _get_list(key: str, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Read a comma-separated setting from secrets/env; default if it is unset or empty."""
+    raw = _get_secret(key)
+    items = tuple(item.strip() for item in str(raw or "").split(",") if item.strip())
+    return items or default
+
+
 CEREBRAS_API_KEY = _get_secret("CEREBRAS_API_KEY")
 OPENAI_API_KEY = _get_secret("OPENAI_API_KEY")
 OPENROUTER_API_KEY = _get_secret("OPENROUTER_API_KEY")
 PARALLEL_API_KEY = _get_secret("PARALLEL_API_KEY")
+
+# OpenRouter can serve one model from many backends, some run by Chinese companies or in
+# Asia. Requests are limited to this allowlist (OpenRouter provider slugs) of backends that
+# OpenRouter records as headquartered in the US or Europe, with data centres, where
+# listed, only there. Anything else is left out, including backends with no recorded
+# location and decentralised networks that run on third-party hardware anywhere
+# (chutes, io-net, akashml, near-ai). A model with no allowed backend fails (404) rather
+# than falling back. scripts/check_openrouter_providers.py re-checks the list against
+# OpenRouter's /api/v1/providers data. Last reviewed 2026-11-01.
+#
+# Limits: this is where the company is based, not a guarantee of where a given request
+# runs. OpenRouter records data centres for only some backends, and a US cloud can serve a
+# request from any of its regions.
+_DEFAULT_OPENROUTER_ALLOWED_PROVIDERS = (
+    # United States
+    "amazon-bedrock",
+    "anthropic",
+    "azure",
+    "baseten",
+    "cerebras",
+    "claude-on-aws",
+    "cloudflare",
+    "coreweave",
+    "crusoe",
+    "databricks",
+    "deepinfra",
+    "digitalocean",
+    "fireworks",
+    "google-ai-studio",
+    "google-vertex",
+    "groq",
+    "inference-net",
+    "ionstream",
+    "modal",
+    "modelrun",
+    "nvidia",
+    "openai",
+    "parasail",
+    "particle-ai",
+    "sambanova",
+    "together",
+    "venice",
+    "wafer",
+    # Europe
+    "inceptron",
+    "mistral",
+    "nebius",
+    "nextbit",
+)
+OPENROUTER_ALLOWED_PROVIDERS = _get_list(
+    "OPENROUTER_ALLOWED_PROVIDERS", _DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+)
 
 # Which LLM provider serves chat completions. Switching is a config change only.
 SUPPORTED_PROVIDERS = ("openai", "cerebras", "openrouter")
@@ -125,9 +184,7 @@ DEFAULT_REASONING_FORMAT = "parsed"
 # Client-side pacing, applied to whichever provider is active. Cerebras allows
 # 300 req/min on the paid Developer tier (5 on the free trial); OpenAI limits
 # depend on the account tier, and its 429s are retried by the SDK regardless.
-LLM_REQUESTS_PER_MIN = _get_int(
-    "LLM_REQUESTS_PER_MIN", 300, legacy_key="CEREBRAS_REQUESTS_PER_MIN"
-)
+LLM_REQUESTS_PER_MIN = _get_int("LLM_REQUESTS_PER_MIN", 300, legacy_key="CEREBRAS_REQUESTS_PER_MIN")
 
 # Both SDKs already retry 408/409/429/5xx with retry-after-aware exponential
 # backoff; these just widen their defaults (2 retries, 60s) for a slower,

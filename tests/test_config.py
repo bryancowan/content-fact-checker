@@ -119,3 +119,38 @@ def test_reasoning_effort_is_resolved_per_provider(monkeypatch):
 
     assert config.resolve_reasoning_effort("openrouter") == "low"
     assert config.resolve_reasoning_effort("openai") == "high"
+
+
+# --- OpenRouter backend allowlist --------------------------------------------
+
+# Backends we must never route to: Chinese-owned or Asia-based (including ones OpenRouter
+# lists under Singapore or the US), and decentralised networks that run on third-party
+# hardware anywhere.
+_EXCLUDED_BACKENDS = {
+    "xiaomi", "minimax", "alibaba", "streamlake", "dekallm", "deepseek", "moonshotai",
+    "z-ai", "siliconflow", "seed", "tencent", "baidu", "stepfun", "nex-agi", "novita",
+    "phala", "chutes", "io-net", "akashml", "near-ai",
+}  # fmt: skip
+
+
+def test_the_default_allowlist_excludes_chinese_and_asian_backends():
+    assert not _EXCLUDED_BACKENDS & set(config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS)
+
+
+def test_the_default_allowlist_has_no_duplicates_and_is_lowercase_slugs():
+    slugs = config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+
+    assert len(slugs) == len(set(slugs))
+    assert all(s == s.lower() and " " not in s for s in slugs)
+
+
+def test_the_allowlist_can_be_overridden_from_the_environment(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", " together , fireworks,, ")
+
+    assert config._get_list("OPENROUTER_ALLOWED_PROVIDERS", ("x",)) == ("together", "fireworks")
+
+
+def test_an_empty_override_falls_back_to_the_default_not_to_no_restriction(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", "  ")
+
+    assert config._get_list("OPENROUTER_ALLOWED_PROVIDERS", ("together",)) == ("together",)

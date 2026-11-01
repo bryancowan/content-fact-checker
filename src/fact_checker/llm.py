@@ -16,6 +16,7 @@ from .config import (
     LLM_PROVIDER,
     MAX_IMAGES_PER_REQUEST,
     MAX_TOTAL_REQUEST_BYTES,
+    OPENROUTER_ALLOWED_PROVIDERS,
     REASONING_EFFORT_ENV,
     resolve_reasoning_effort,
 )
@@ -166,7 +167,11 @@ def _reasoning_and_sampling_kwargs(
         return {
             "extra_body": {
                 "reasoning": {"effort": reasoning_effort},
-                "provider": {"require_parameters": True},
+                "provider": {
+                    "require_parameters": True,
+                    # Only US and European backends; see config.py.
+                    "only": list(OPENROUTER_ALLOWED_PROVIDERS),
+                },
             },
         }
     kwargs = {"reasoning_effort": reasoning_effort}
