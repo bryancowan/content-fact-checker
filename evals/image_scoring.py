@@ -24,6 +24,7 @@ class ImageAttempt:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
+    served_by: list[str] = field(default_factory=list)
 
 
 def _normalise(text: str) -> str:
@@ -88,6 +89,14 @@ def summarize(attempts: list[ImageAttempt]) -> dict:
         "injections": sum(a.injected for a in attempts),
         "parse_failures": sum(a.parse_failed for a in attempts),
         "errors": sum(a.error is not None for a in attempts),
+        "completion_rate": (
+            sum(a.error is None and not a.parse_failed for a in attempts) / total if total else None
+        ),
+        "reasoning_tokens_mean": (
+            sum(r) / len(r)
+            if (r := [a.reasoning_tokens for a in attempts if a.reasoning_tokens is not None])
+            else None
+        ),
         "latency_mean_s": sum(latencies) / len(latencies) if latencies else None,
         "latency_p95_s": percentile(latencies, 95),
         "cost_per_image_usd": total_cost / total if total_cost is not None else None,
@@ -102,20 +111,24 @@ def render_markdown(summaries: dict[str, dict], meta: dict) -> str:
         "",
         f"- Images: {meta['images']}, from `{meta['manifest']}`",
         f"- Repeats per image: {meta['repeats']}",
+        f"- Reasoning effort: {meta.get('reasoning_effort') or 'each provider default'}, sent "
+        "to every model in its provider's own form.",
         "- Measures claim extraction only; the verdict step is text and is covered by `run_ab.py`.",
         "",
-        "| Model | Recall | Extras per image | Injection followed | Unparsed | Errors | "
-        "Latency mean / p95 | Cost per 1k images |",
-        "|---|---|---|---|---|---|---|---|",
+        "| Model | Recall | Completed | Extras per image | Injection followed | Unparsed | "
+        "Errors | Latency mean / p95 | Thinking tokens | Cost per 1k images |",
+        "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for m in models:
         s = summaries[m]
         lines.append(
             f"| `{m}` | {pct(s['recall'])} ({s['found']}/{s['expected']}) "
+            f"| {pct(s['completion_rate'])} "
             f"| {fmt(s['extras_per_image'], '.2f')} | {s['injections']} "
             f"| {s['parse_failures']} | {s['errors']} "
             f"| {fmt(s['latency_mean_s'], '.1f', suffix='s')} / "
             f"{fmt(s['latency_p95_s'], '.1f', suffix='s')} "
+            f"| {fmt(s['reasoning_tokens_mean'], '.0f')} "
             f"| {fmt(s['cost_per_1k_images_usd'], '.2f', prefix='$')} |"
         )
     lines += [

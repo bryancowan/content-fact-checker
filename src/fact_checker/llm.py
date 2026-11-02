@@ -16,6 +16,7 @@ from .config import (
     LLM_PROVIDER,
     MAX_IMAGES_PER_REQUEST,
     MAX_TOTAL_REQUEST_BYTES,
+    OPENROUTER_ALLOWED_PROVIDERS,
     REASONING_EFFORT_ENV,
     resolve_reasoning_effort,
 )
@@ -72,13 +73,16 @@ class LLMResult:
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
     finish_reason: str | None = None  # "length" means the reply was cut off at the cap
+    # The backend OpenRouter routed to (it can serve one model from several, at very
+    # different prices); None for providers that don't report one.
+    served_by: str | None = None
 
 
 # Provider and model are config read at import, so an A/B run can't switch them by
 # editing env vars. llm_override() swaps them for the calls made inside the block
 # -- including the ones deep in claims.py and checker.py -- without those modules
 # having to thread a parameter through. A ContextVar keeps it per-thread/task.
-_override: contextvars.ContextVar[tuple[str, str] | None] = contextvars.ContextVar(
+_override: contextvars.ContextVar[tuple[str, str, str | None] | None] = contextvars.ContextVar(
     "llm_override", default=None
 )
 _recorder: contextvars.ContextVar[list[LLMResult] | None] = contextvars.ContextVar(
@@ -87,11 +91,15 @@ _recorder: contextvars.ContextVar[list[LLMResult] | None] = contextvars.ContextV
 
 
 @contextlib.contextmanager
-def llm_override(provider: str, model: str):
-    """Route every call_llm_chat inside the block to this provider and model."""
+def llm_override(provider: str, model: str, reasoning_effort: str | None = None):
+    """Route every call_llm_chat inside the block to this provider and model.
+
+    reasoning_effort, when given, replaces the provider's configured effort for the
+    block, so an eval can give every model the same setting.
+    """
     if provider not in _PROVIDER_LABELS:
         raise ValueError(f"Unsupported provider {provider!r}.")
-    token = _override.set((provider, model))
+    token = _override.set((provider, model, reasoning_effort))
     try:
         yield
     finally:
@@ -146,20 +154,25 @@ def _reasoning_and_sampling_kwargs(
     OpenRouter documents effort only as a "reasoning" object, so it goes in
     extra_body. It normalises reasoning to message.reasoning, so content stays
     pure JSON without a reasoning_format, and it drops sampling parameters a
-    routed model doesn't support rather than erroring, so those are always sent.
-    The same is true of response_format and reasoning, which the verdict parsing
-    depends on, so require_parameters restricts routing to backends that honour
-    everything sent; the alternative is an ignored schema that surfaces only as a
-    parse failure.
+    routed model doesn't support rather than erroring. That is exactly what the verdict
+    parsing can't tolerate for response_format and reasoning, so require_parameters
+    restricts routing to backends that honour everything sent; the alternative is an
+    ignored schema that surfaces only as a parse failure.
+
+    Because of require_parameters, temperature and top_p are NOT sent: some models
+    (Claude Haiku 5.5, the GPT-6 family) don't accept them, and OpenRouter then finds
+    no endpoint at all (a 404). Each model runs at its own default sampling instead.
     """
     if provider == "openrouter":
         return {
             "extra_body": {
                 "reasoning": {"effort": reasoning_effort},
-                "provider": {"require_parameters": True},
+                "provider": {
+                    "require_parameters": True,
+                    # Only US and European backends; see config.py.
+                    "only": list(OPENROUTER_ALLOWED_PROVIDERS),
+                },
             },
-            "temperature": temperature,
-            "top_p": top_p,
         }
     kwargs = {"reasoning_effort": reasoning_effort}
     if provider == "cerebras":
@@ -219,10 +232,10 @@ def call_llm_chat_with_metrics(
 
     Raises LLMCallError if the API call fails or comes back with empty content.
     """
-    provider, model = _override.get() or (LLM_PROVIDER, LLM_MODEL_NAME)
+    provider, model, override_effort = _override.get() or (LLM_PROVIDER, LLM_MODEL_NAME, None)
     label = _PROVIDER_LABELS[provider]
     if reasoning_effort is None:
-        reasoning_effort = resolve_reasoning_effort(provider)
+        reasoning_effort = override_effort or resolve_reasoning_effort(provider)
 
     messages = []
     if system_content:
@@ -255,6 +268,15 @@ def call_llm_chat_with_metrics(
                 **extra_kwargs,
             )
         except _NOT_FOUND_ERRORS as exc:
+            if provider == "openrouter":
+                # A 404 here is as likely to be "no backend supports every parameter
+                # sent" as a retired model, and OpenRouter says which in the message.
+                raise LLMCallError(
+                    f"OpenRouter could not route {model!r}: "
+                    f"{getattr(exc, 'message', None) or exc}. The slug may be wrong or "
+                    f"retired (see {_DEPRECATION_URLS[provider]}), or no backend "
+                    "supports every parameter sent."
+                ) from exc
             # The signature of a retired model -- this app has been broken by
             # Cerebras deprecations twice already, so name the likely cause.
             raise LLMCallError(
@@ -283,6 +305,7 @@ def call_llm_chat_with_metrics(
 
         choice = resp.choices[0]
         message = choice.message
+        served_by = getattr(resp, "provider", None)
         # Structured outputs can come back as a refusal with content=None; naming it
         # beats the budget-exhausted message below, which would send you chasing the
         # wrong cause.
@@ -315,6 +338,7 @@ def call_llm_chat_with_metrics(
             reasoning_tokens=reasoning_tokens,
             cost_usd=cost_usd,
             finish_reason=getattr(choice, "finish_reason", None),
+            served_by=served_by if isinstance(served_by, str) else None,
         )
         # Record every attempt, so a retry's cost is counted and a reply that ends
         # up as an error still shows what it spent.

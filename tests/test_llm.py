@@ -241,7 +241,7 @@ def test_cerebras_request_is_unchanged(monkeypatch):
     assert call["reasoning_format"] == "parsed"
 
 
-def test_openrouter_sends_reasoning_object_and_sampling_params(monkeypatch):
+def test_openrouter_sends_reasoning_object_and_no_sampling_params(monkeypatch):
     """OpenRouter documents effort only as a reasoning object; it has no reasoning_format."""
     fake_client = _install_fake_client(monkeypatch, provider="openrouter")
 
@@ -250,12 +250,18 @@ def test_openrouter_sends_reasoning_object_and_sampling_params(monkeypatch):
     [call] = fake_client.chat.completions.calls
     assert call["extra_body"] == {
         "reasoning": {"effort": "high"},
-        # Without this OpenRouter may route to a backend that ignores the JSON
-        # schema, which would only show up later as a parse failure.
-        "provider": {"require_parameters": True},
+        "provider": {
+            # Without this OpenRouter may route to a backend that ignores the JSON
+            # schema, which would only show up later as a parse failure.
+            "require_parameters": True,
+            # Only US and European backends.
+            "only": list(config.OPENROUTER_ALLOWED_PROVIDERS),
+        },
     }
-    assert call["temperature"] == config.DEFAULT_TEMPERATURE
-    assert call["top_p"] == config.DEFAULT_TOP_P
+    # Claude Haiku 5.5 and the GPT-6 family reject these; with require_parameters
+    # OpenRouter then finds no endpoint (404), so each model uses its own defaults.
+    assert "temperature" not in call
+    assert "top_p" not in call
     assert "reasoning_effort" not in call
     assert "reasoning_format" not in call
 
@@ -287,6 +293,52 @@ def test_override_switches_provider_model_and_effort_for_calls_inside_it(monkeyp
     assert inside["extra_body"]["reasoning"] == {"effort": "low"}
     assert outside["model"] != "reflection/beam-1.0-501b-a23b"
     assert fake_client.requested_providers == ["openrouter", "openai"]
+
+
+def test_override_can_set_one_reasoning_effort_for_every_provider(monkeypatch):
+    """An eval gives all models the same setting, whatever each provider is configured for."""
+    monkeypatch.setenv("OPENAI_REASONING_EFFORT", "high")
+    monkeypatch.setenv("OPENROUTER_REASONING_EFFORT", "high")
+    fake_client = _install_fake_client(monkeypatch)
+
+    with llm.llm_override("openai", "gpt-6-luna", reasoning_effort="low"):
+        llm.call_llm_chat(user_content="a")
+    with llm.llm_override("openrouter", "qwen/qwen3.8-27b", reasoning_effort="low"):
+        llm.call_llm_chat(user_content="b")
+
+    openai_call, openrouter_call = fake_client.chat.completions.calls
+    assert openai_call["reasoning_effort"] == "low"
+    assert openrouter_call["extra_body"]["reasoning"] == {"effort": "low"}
+
+
+def test_an_explicit_argument_beats_the_override(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch)
+
+    with llm.llm_override("openai", "gpt-6-luna", reasoning_effort="low"):
+        llm.call_llm_chat(user_content="a", reasoning_effort="none")
+
+    [call] = fake_client.chat.completions.calls
+    assert call["reasoning_effort"] == "none"
+
+
+def test_served_by_is_recorded_when_the_response_names_a_backend(monkeypatch):
+    fake_client = _install_fake_client(monkeypatch, provider="openrouter")
+    original = fake_client.chat.completions.create
+
+    def create(**kwargs):
+        resp = original(**kwargs)
+        resp.provider = "DeepInfra"
+        return resp
+
+    monkeypatch.setattr(fake_client.chat.completions, "create", create)
+
+    assert llm.call_llm_chat_with_metrics(user_content="hi").served_by == "DeepInfra"
+
+
+def test_served_by_is_none_when_the_response_has_no_backend(monkeypatch):
+    _install_fake_client(monkeypatch)
+
+    assert llm.call_llm_chat_with_metrics(user_content="hi").served_by is None
 
 
 def test_override_rejects_an_unknown_provider():
@@ -412,6 +464,9 @@ def test_refusal_is_reported_as_a_refusal(monkeypatch):
 def test_sdk_errors_become_llm_call_errors(monkeypatch, provider, sdk, label, error_name, match):
     error = getattr(sdk, error_name)("boom")
     _install_fake_client(monkeypatch, provider=provider, raises=error)
+
+    if provider == "openrouter" and error_name == "NotFoundError":
+        match = "could not route"  # says why, since a 404 there isn't always a retired model
 
     with pytest.raises(llm.LLMCallError, match=match) as excinfo:
         llm.call_llm_chat(user_content="hi")

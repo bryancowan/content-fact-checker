@@ -119,3 +119,52 @@ def test_reasoning_effort_is_resolved_per_provider(monkeypatch):
 
     assert config.resolve_reasoning_effort("openrouter") == "low"
     assert config.resolve_reasoning_effort("openai") == "high"
+
+
+# --- OpenRouter backend allowlist --------------------------------------------
+
+
+def test_the_default_allowlist_excludes_chinese_and_asian_backends():
+    excluded = config.EXCLUDED_OPENROUTER_PROVIDERS
+
+    assert {"xiaomi", "minimax", "alibaba", "streamlake", "dekallm", "deepseek"} <= excluded
+    assert {"novita", "phala", "chutes", "io-net"} <= excluded  # ownership or how they run
+    assert not excluded & set(config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS)
+
+
+def test_the_default_allowlist_has_no_duplicates_and_is_lowercase_slugs():
+    slugs = config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+
+    assert len(slugs) == len(set(slugs))
+    assert all(s == s.lower() and " " not in s for s in slugs)
+
+
+def test_the_allowlist_defaults_to_the_vetted_list(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_ALLOWED_PROVIDERS", raising=False)
+
+    assert config.resolve_openrouter_allowed_providers() == (
+        config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+    )
+
+
+def test_an_override_can_narrow_the_allowlist(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", " together , fireworks,, ")
+
+    assert config.resolve_openrouter_allowed_providers() == ("together", "fireworks")
+
+
+def test_an_empty_override_means_the_vetted_list_not_no_restriction(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", "  ")
+
+    assert config.resolve_openrouter_allowed_providers() == (
+        config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+    )
+
+
+@pytest.mark.parametrize("override", ["deepseek", "together,xiaomi", "some-new-backend"])
+def test_an_override_cannot_widen_the_allowlist(monkeypatch, override):
+    """Naming a backend off the vetted list must fail loudly, never route requests there."""
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", override)
+
+    with pytest.raises(ValueError, match="may only narrow"):
+        config.resolve_openrouter_allowed_providers()

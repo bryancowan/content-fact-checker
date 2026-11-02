@@ -1,0 +1,13 @@
+# The models in the A/B comparison, as provider:model. Used with --models @evals/models.txt.
+# One per line; # starts a comment. A model's provider decides how it is billed and reached:
+# openai and cerebras are called directly, openrouter goes through OpenRouter.
+
+openai:gpt-6-luna                    # the app's default; the baseline
+openai:gpt-6.1-terra                 # GPT-6.1 Terra, direct
+cerebras:qwen-3.8-27b                # Qwen3.8-27B on Cerebras
+openrouter:qwen/qwen3.8-27b          # Qwen3.8-27B on OpenRouter's backends, for the host comparison
+openrouter:nvidia/nemotron-3.5-super-vl
+openrouter:minimax/minimax-m3.1-flash
+openrouter:xiaomi/mimo-v2.6-pro         # only DeepInfra serves it within the US/Europe allowlist
+openrouter:anthropic/claude-haiku-5.5
+openrouter:particle-ai/particle-1
