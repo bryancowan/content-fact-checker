@@ -197,3 +197,8 @@ Two things that make this class of bug hard to see:
   green during a total provider outage. Only live calls confirm the pipeline works.
 - `config.py` reads secrets and `clients.py` caches clients **at import time**, so a
   process restart is required after changing a key.
+
+<!-- entire-agent:begin -->
+Read .entire/agent-guide.md for this repository's workflow, source inspection, and verification guidance.
+@.entire/agent-guide.md
+<!-- entire-agent:end -->
