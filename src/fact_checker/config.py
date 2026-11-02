@@ -141,7 +141,7 @@ OPENROUTER_ALLOWED_PROVIDERS = resolve_openrouter_allowed_providers()
 
 # Which LLM provider serves chat completions. Switching is a config change only.
 SUPPORTED_PROVIDERS = ("openai", "cerebras", "openrouter")
-DEFAULT_PROVIDER = "openai"
+DEFAULT_PROVIDER = "openrouter"
 
 # Overridable so a future deprecation is a config change, not a code change --
 # gemma-4-31b (retired 2026-09-03) and zai-glm-4.7 (retired 2026-08-17) both
@@ -149,9 +149,12 @@ DEFAULT_PROVIDER = "openai"
 _DEFAULT_MODELS = {
     "openai": "gpt-6-luna",
     "cerebras": "qwen-3.8-27b",
-    # OpenRouter serves hundreds of models, so there is no natural default; this
-    # one is the first open model we evaluated. Set LLM_MODEL_NAME to pick another.
-    "openrouter": "nvidia/nemotron-3.5-super-vl",
+    # The app's default model. In the 2026-11-01 comparison (228 verdicts per model)
+    # particle-1 matched gpt-6-luna's accuracy within noise (96.5% vs 96.9%) at about
+    # half the cost per 1,000 claims, and found every claim in the image test. It has a
+    # single backend (Particle AI, on the OpenRouter allowlist), so it has no fallback if
+    # that backend is down; set LLM_PROVIDER=openai to move back to gpt-6-luna.
+    "openrouter": "particle-ai/particle-1",
 }
 
 # Every provider gets "high": the Cerebras default already changed once between
@@ -247,5 +250,5 @@ HTTP_USER_AGENT = (
 
 # Cap article text sent for claim extraction. Measured 2026-09-07: 120k chars
 # came to 28,998 prompt tokens, comfortably inside the 128k Cerebras paid
-# context and far inside gpt-6-luna's 1.05M.
+# context and far inside the 1.05M of both gpt-6-luna and particle-1.
 MAX_ARTICLE_CHARS = 120_000

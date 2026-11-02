@@ -41,13 +41,13 @@ local venvs use 3.13.
 ## Environment Setup
 
 Copy `.env.example` to `.env` and populate the keys:
-- `OPENAI_API_KEY` — for LLM inference (`gpt-6-luna` by default)
+- `OPENROUTER_API_KEY` — for LLM inference (`particle-ai/particle-1` by default; set
+  `LLM_MODEL_NAME` to any OpenRouter `provider/model` slug)
 - `PARALLEL_API_KEY` — for web search
+- `OPENAI_API_KEY` — only if `LLM_PROVIDER=openai` (`gpt-6-luna` by default)
 - `CEREBRAS_API_KEY` — only if `LLM_PROVIDER=cerebras` (`qwen-3.8-27b` by default)
-- `OPENROUTER_API_KEY` — only if `LLM_PROVIDER=openrouter` (`nvidia/nemotron-3.5-super-vl` by default;
-  set `LLM_MODEL_NAME` to any OpenRouter `provider/model` slug)
 
-`LLM_PROVIDER` (`openai` default, `cerebras` or `openrouter`) and `LLM_MODEL_NAME` select the provider and
+`LLM_PROVIDER` (`openrouter` default, `openai` or `cerebras`) and `LLM_MODEL_NAME` select the provider and
 model. Switching is config-only; there is no in-app selector.
 
 On Streamlit Cloud, secrets are read via `st.secrets` (takes priority over `.env`). An optional `APP_PASSWORD` secret gates access behind a login screen.
@@ -66,7 +66,7 @@ This is a Streamlit web app (`web_app.py`) backed by a library in `src/fact_chec
 Cited `top_sources` are filtered against the URLs the search actually returned (`checker.py`), which drops hallucinated citations and any link injected via untrusted input.
 
 **Key modules:**
-- `src/fact_checker/config.py` — API keys, provider (`LLM_PROVIDER`) and model name (`gpt-6-luna` / `qwen-3.8-27b`), reasoning/token settings, rate limit, retry and image constraints. Most values are overridable via env vars or Streamlit secrets, so a model deprecation doesn't require a code change. Settings renamed from `CEREBRAS_*` to `LLM_*` still read the old name as a fallback.
+- `src/fact_checker/config.py` — API keys, provider (`LLM_PROVIDER`) and model name (`particle-ai/particle-1` / `gpt-6-luna` / `qwen-3.8-27b`), reasoning/token settings, rate limit, retry and image constraints. Most values are overridable via env vars or Streamlit secrets, so a model deprecation doesn't require a code change. Settings renamed from `CEREBRAS_*` to `LLM_*` still read the old name as a fallback.
 - `src/fact_checker/clients.py` — lazy singleton clients for OpenAI, Cerebras, OpenRouter (the OpenAI SDK on OpenRouter's base URL) and Parallel APIs; `get_llm_client()` picks the chat client for the configured provider
 - `src/fact_checker/rate_limiter.py` — sliding-window rate limiter, thread-safe so an eval can run several models at once; defaults to 300 req/min (set `LLM_REQUESTS_PER_MIN=5` on the Cerebras free trial)
 - `src/fact_checker/llm.py` — `call_llm_chat()` (returns the text) over `call_llm_chat_with_metrics()` (adds latency, tokens, cost); `llm_override()` / `record_llm_calls()` context managers switch provider/model (and optionally reasoning effort) and collect metrics, including which backend served each call, for the calls inside them without threading parameters through `claims.py`/`checker.py` (used by `evals/`); accepts optional `image_data_urls` for multimodal calls; always acquires rate limiter before calling; sends only the sampling/reasoning parameters the active provider accepts. Raises `LLMCallError` on API failure, refusal or empty content rather than degrading silently.
@@ -110,9 +110,15 @@ the link, which fails the build. For local runs, run it once with
 
 ## Model Notes
 
-Both providers reason by default at `reasoning_effort="high"`, and reasoning tokens
+Every provider reasons by default at `reasoning_effort="high"`, and reasoning tokens
 count against the completion budget — hence `DEFAULT_MAX_COMPLETION_TOKENS = 16384`
 rather than the 4096 used with the earlier, non-reasoning model.
+
+The default is `particle-ai/particle-1` on OpenRouter, chosen after the 2026-11-01 nine-model
+comparison (`evals/results/2026-11-01-matrix-*.md`): it matched `gpt-6-luna`'s accuracy within
+noise at about half the cost per 1,000 claims. Only one backend (Particle AI) serves it, so there
+is no fallback if that backend is down; set `LLM_PROVIDER=openai` to go back to `gpt-6-luna`.
+In production the Render dashboard's `LLM_PROVIDER` decides, not the code default.
 
 Request parameters differ by provider, and `llm._reasoning_and_sampling_kwargs` is the
 one place that handles it:

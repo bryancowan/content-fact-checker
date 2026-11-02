@@ -274,7 +274,7 @@ def test_default_openrouter_model(monkeypatch):
     llm.call_llm_chat(user_content="hi")
 
     [call] = fake_client.chat.completions.calls
-    assert call["model"] == "nvidia/nemotron-3.5-super-vl"
+    assert call["model"] == "particle-ai/particle-1"
 
 
 # --- per-call override and metrics ------------------------------------------
