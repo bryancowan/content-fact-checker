@@ -203,9 +203,9 @@ def test_the_report_shows_thinking_tokens_completion_and_the_backends_that_serve
     summaries = {
         "openrouter:a": scoring.summarize(
             [
-                _attempt("true", "true", served_by="DeepInfra", reasoning_tokens=100),
-                _attempt("true", "true", served_by="DeepInfra", reasoning_tokens=300),
-                _attempt("true", "true", served_by="Together", reasoning_tokens=200),
+                _attempt("true", "true", served_by=["DeepInfra"], reasoning_tokens=100),
+                _attempt("true", "true", served_by=["DeepInfra"], reasoning_tokens=300),
+                _attempt("true", "true", served_by=["Together"], reasoning_tokens=200),
             ]
         ),
         "openai:b": scoring.summarize([_attempt("true", "true", reasoning_tokens=50)]),
@@ -225,3 +225,10 @@ def test_the_report_shows_thinking_tokens_completion_and_the_backends_that_serve
     assert "| Completed |" in report and "Thinking tokens" in report
     assert "- `openrouter:a`: DeepInfra 2, Together 1" in report
     assert "`openai:b`:" not in report.split("Backends that served")[1]  # none reported
+
+
+def test_every_backend_a_retry_used_is_counted_not_just_the_last():
+    """A truncated call and its retry can land on different backends, at different prices."""
+    attempts = [_attempt("true", "true", served_by=["DeepInfra", "Together"])]
+
+    assert scoring.summarize(attempts)["served_by"] == {"DeepInfra": 1, "Together": 1}

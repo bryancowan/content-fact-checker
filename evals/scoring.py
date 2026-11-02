@@ -1,7 +1,7 @@
 """Scoring and reporting for the model A/B test. Pure functions, no network."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 VERDICTS = ("true", "false", "uncertain")
 
@@ -22,7 +22,9 @@ class Attempt:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
-    served_by: str | None = None  # the backend OpenRouter routed to, when it says
+    # Every backend OpenRouter routed this attempt's calls to, when it says: a retry can
+    # land on a different one from the call it replaces.
+    served_by: list[str] = field(default_factory=list)
 
     @property
     def correct(self) -> bool:
@@ -136,8 +138,8 @@ def summarize(attempts: list[Attempt]) -> dict:
 
     served_by: dict[str, int] = {}
     for a in attempts:
-        if a.served_by:
-            served_by[a.served_by] = served_by.get(a.served_by, 0) + 1
+        for backend in a.served_by:
+            served_by[backend] = served_by.get(backend, 0) + 1
 
     latencies = [a.latency_s for a in attempts if a.latency_s is not None]
     costs = [a.cost_usd for a in attempts if a.cost_usd is not None]

@@ -101,9 +101,43 @@ _DEFAULT_OPENROUTER_ALLOWED_PROVIDERS = (
     "nebius",
     "nextbit",
 )
-OPENROUTER_ALLOWED_PROVIDERS = _get_list(
-    "OPENROUTER_ALLOWED_PROVIDERS", _DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
-)
+
+# Backends that must never be allowed, even where OpenRouter records them under a US or
+# European headquarters. Chinese-owned or Asia-run backends (some listed under Singapore or
+# the US), backends with ownership we could not verify, and decentralised networks that run
+# on third-party hardware anywhere. scripts/check_openrouter_providers.py fails if any of
+# these is on the allowlist, so a location record alone can't wave one through.
+EXCLUDED_OPENROUTER_PROVIDERS = frozenset(
+    {
+        "akashml", "alibaba", "baidu", "chutes", "deepseek", "dekallm", "io-net", "minimax",
+        "moonshotai", "near-ai", "nex-agi", "novita", "phala", "seed", "siliconflow",
+        "stepfun", "streamlake", "tencent", "xiaomi", "z-ai",
+    }
+)  # fmt: skip
+
+
+def resolve_openrouter_allowed_providers() -> tuple[str, ...]:
+    """The backends OpenRouter may use: the vetted list, or a subset of it from the env.
+
+    OPENROUTER_ALLOWED_PROVIDERS may only narrow the vetted list. Naming a backend that is
+    not on it raises, rather than quietly widening where requests can go: adding a backend
+    is a code change to the list above, made after running the location check.
+    """
+    requested = _get_list("OPENROUTER_ALLOWED_PROVIDERS", ())
+    if not requested:
+        return _DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+    unapproved = [slug for slug in requested if slug not in _DEFAULT_OPENROUTER_ALLOWED_PROVIDERS]
+    if unapproved:
+        raise ValueError(
+            "OPENROUTER_ALLOWED_PROVIDERS may only narrow the vetted list, but names "
+            f"{', '.join(unapproved)}. To allow a new backend, add it to "
+            "_DEFAULT_OPENROUTER_ALLOWED_PROVIDERS in config.py and run "
+            "scripts/check_openrouter_providers.py."
+        )
+    return requested
+
+
+OPENROUTER_ALLOWED_PROVIDERS = resolve_openrouter_allowed_providers()
 
 # Which LLM provider serves chat completions. Switching is a config change only.
 SUPPORTED_PROVIDERS = ("openai", "cerebras", "openrouter")

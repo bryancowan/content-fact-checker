@@ -24,7 +24,7 @@ class ImageAttempt:
     completion_tokens: int | None = None
     reasoning_tokens: int | None = None
     cost_usd: float | None = None
-    served_by: str | None = None
+    served_by: list[str] = field(default_factory=list)
 
 
 def _normalise(text: str) -> str:

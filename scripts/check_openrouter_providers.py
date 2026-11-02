@@ -4,7 +4,9 @@
 config.OPENROUTER_ALLOWED_PROVIDERS limits OpenRouter to backends based in the US or
 Europe. OpenRouter publishes each backend's headquarters and, for some, its data centres
 at /api/v1/providers. This flags any allowlisted backend that OpenRouter no longer lists,
-records no headquarters for, or places outside the US and Europe. It needs no API key.
+records no headquarters for, or places outside the US and Europe, and any that is on the
+config.EXCLUDED_OPENROUTER_PROVIDERS list whatever OpenRouter's record says. It needs no
+API key.
 
 Run it when you change the list and now and then, since OpenRouter's data and backends
 change. Exits 1 if anything is flagged.
@@ -17,7 +19,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from fact_checker.config import OPENROUTER_ALLOWED_PROVIDERS  # noqa: E402
+from fact_checker.config import (  # noqa: E402
+    EXCLUDED_OPENROUTER_PROVIDERS,
+    OPENROUTER_ALLOWED_PROVIDERS,
+)
 
 PROVIDERS_URL = "https://openrouter.ai/api/v1/providers"
 # ISO country codes OpenRouter reports for places we accept: the US, plus European countries.
@@ -31,6 +36,10 @@ def find_problems(allowed: tuple[str, ...] | list[str], providers: list[dict]) -
     by_slug = {p["slug"]: p for p in providers}
     problems = []
     for slug in allowed:
+        if slug in EXCLUDED_OPENROUTER_PROVIDERS:
+            # Whatever OpenRouter's record says: these were excluded on ownership or how
+            # they run, which a headquarters field doesn't show.
+            problems.append(f"{slug}: on the excluded list (ownership or how it runs)")
         record = by_slug.get(slug)
         if record is None:
             problems.append(f"{slug}: not in OpenRouter's provider list (renamed or removed?)")

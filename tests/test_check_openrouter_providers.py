@@ -11,7 +11,7 @@ _spec.loader.exec_module(checker)
 PROVIDERS = [
     {"slug": "together", "headquarters": "US", "datacenters": []},
     {"slug": "nebius", "headquarters": "NL", "datacenters": ["FI"]},
-    {"slug": "minimax", "headquarters": "SG", "datacenters": ["US"]},
+    {"slug": "asiahost", "headquarters": "SG", "datacenters": ["US"]},
     {"slug": "mystery", "headquarters": None, "datacenters": []},
     {"slug": "mixed", "headquarters": "US", "datacenters": ["US", "SG"]},
 ]
@@ -22,7 +22,7 @@ def test_backends_in_the_us_or_europe_pass():
 
 
 def test_a_backend_headquartered_elsewhere_is_flagged_even_with_a_us_data_centre():
-    [problem] = checker.find_problems(["minimax"], PROVIDERS)
+    [problem] = checker.find_problems(["asiahost"], PROVIDERS)
 
     assert "headquarters SG" in problem
 
@@ -43,3 +43,12 @@ def test_a_slug_openrouter_no_longer_lists_is_flagged():
     [problem] = checker.find_problems(["gone"], PROVIDERS)
 
     assert "not in OpenRouter's provider list" in problem
+
+
+def test_an_excluded_backend_is_flagged_even_when_openrouter_lists_it_in_the_us():
+    """Ownership exclusions can't be seen in a headquarters field."""
+    providers = [{"slug": "novita", "headquarters": "US", "datacenters": ["US"]}]
+
+    [problem] = checker.find_problems(["novita"], providers)
+
+    assert "excluded list" in problem

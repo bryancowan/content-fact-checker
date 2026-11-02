@@ -123,18 +123,13 @@ def test_reasoning_effort_is_resolved_per_provider(monkeypatch):
 
 # --- OpenRouter backend allowlist --------------------------------------------
 
-# Backends we must never route to: Chinese-owned or Asia-based (including ones OpenRouter
-# lists under Singapore or the US), and decentralised networks that run on third-party
-# hardware anywhere.
-_EXCLUDED_BACKENDS = {
-    "xiaomi", "minimax", "alibaba", "streamlake", "dekallm", "deepseek", "moonshotai",
-    "z-ai", "siliconflow", "seed", "tencent", "baidu", "stepfun", "nex-agi", "novita",
-    "phala", "chutes", "io-net", "akashml", "near-ai",
-}  # fmt: skip
-
 
 def test_the_default_allowlist_excludes_chinese_and_asian_backends():
-    assert not _EXCLUDED_BACKENDS & set(config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS)
+    excluded = config.EXCLUDED_OPENROUTER_PROVIDERS
+
+    assert {"xiaomi", "minimax", "alibaba", "streamlake", "dekallm", "deepseek"} <= excluded
+    assert {"novita", "phala", "chutes", "io-net"} <= excluded  # ownership or how they run
+    assert not excluded & set(config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS)
 
 
 def test_the_default_allowlist_has_no_duplicates_and_is_lowercase_slugs():
@@ -144,13 +139,32 @@ def test_the_default_allowlist_has_no_duplicates_and_is_lowercase_slugs():
     assert all(s == s.lower() and " " not in s for s in slugs)
 
 
-def test_the_allowlist_can_be_overridden_from_the_environment(monkeypatch):
+def test_the_allowlist_defaults_to_the_vetted_list(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_ALLOWED_PROVIDERS", raising=False)
+
+    assert config.resolve_openrouter_allowed_providers() == (
+        config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+    )
+
+
+def test_an_override_can_narrow_the_allowlist(monkeypatch):
     monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", " together , fireworks,, ")
 
-    assert config._get_list("OPENROUTER_ALLOWED_PROVIDERS", ("x",)) == ("together", "fireworks")
+    assert config.resolve_openrouter_allowed_providers() == ("together", "fireworks")
 
 
-def test_an_empty_override_falls_back_to_the_default_not_to_no_restriction(monkeypatch):
+def test_an_empty_override_means_the_vetted_list_not_no_restriction(monkeypatch):
     monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", "  ")
 
-    assert config._get_list("OPENROUTER_ALLOWED_PROVIDERS", ("together",)) == ("together",)
+    assert config.resolve_openrouter_allowed_providers() == (
+        config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS
+    )
+
+
+@pytest.mark.parametrize("override", ["deepseek", "together,xiaomi", "some-new-backend"])
+def test_an_override_cannot_widen_the_allowlist(monkeypatch, override):
+    """Naming a backend off the vetted list must fail loudly, never route requests there."""
+    monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", override)
+
+    with pytest.raises(ValueError, match="may only narrow"):
+        config.resolve_openrouter_allowed_providers()

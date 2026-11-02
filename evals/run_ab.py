@@ -143,7 +143,7 @@ def run_attempt(
         attempt.completion_tokens = usage["completion_tokens"]
         attempt.reasoning_tokens = usage["reasoning_tokens"]
         attempt.cost_usd = usage["cost_usd"]
-        attempt.served_by = calls[-1].served_by
+        attempt.served_by = [c.served_by for c in calls if c.served_by]
         if attempt.cost_usd is None:
             attempt.cost_usd = price_tokens(
                 usage["prompt_tokens"], usage["completion_tokens"], pricing.get(spec)

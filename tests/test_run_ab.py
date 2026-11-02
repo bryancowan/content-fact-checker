@@ -122,3 +122,25 @@ def test_run_attempt_gives_the_model_the_requested_reasoning_effort(monkeypatch)
     assert seen == [("openrouter", "qwen/qwen3.8-27b", "low")]
     assert isinstance(attempt, Attempt)
     assert attempt.correct
+
+
+def test_run_attempt_records_every_backend_and_sums_the_cost_of_a_retry(monkeypatch):
+    def fake_judge(claim, results):
+        calls = llm._recorder.get()
+        for backend, cost in (("DeepInfra", 1.0), ("Together", 0.01)):
+            calls.append(
+                llm.LLMResult(
+                    text="x", provider="openrouter", model="m", latency_s=1.0,
+                    prompt_tokens=10, completion_tokens=10, reasoning_tokens=0,
+                    cost_usd=cost, served_by=backend,
+                )
+            )  # fmt: skip
+        return checker.ClaimResult(claim=claim, verdict="true", reason="r")
+
+    monkeypatch.setattr(run_ab, "judge_claim", fake_judge)
+    claim = {"id": "c1", "claim": "A claim.", "label": "true"}
+
+    attempt = run_ab.run_attempt("openrouter:m", claim, [], {})
+
+    assert attempt.served_by == ["DeepInfra", "Together"]
+    assert attempt.cost_usd == pytest.approx(1.01)

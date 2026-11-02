@@ -131,7 +131,8 @@ one place that handles it:
   without any opt-in parameter, and `provider` names the backend that served the call
   (one model can be served by several at very different prices). Requests are limited to
   US- and Europe-based backends with `provider.only` set from
-  `config.OPENROUTER_ALLOWED_PROVIDERS` (override with the env var of the same name): OpenRouter
+  `config.OPENROUTER_ALLOWED_PROVIDERS` (the env var of the same name can only narrow it; naming
+  a backend off the list raises at startup): OpenRouter
   otherwise routes to any backend, including ones run by Chinese companies. A model with no
   allowed backend fails with a 404 instead of falling back. The list is company location, not a
   guarantee of where a request runs; see the comment in `config.py` for its limits.
