@@ -71,8 +71,8 @@ def test_new_key_wins_over_the_legacy_key(env):
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        (None, "openai"),
-        ("", "openai"),
+        (None, "openrouter"),
+        ("", "openrouter"),
         ("openai", "openai"),
         (" Cerebras ", "cerebras"),
         ("OpenRouter", "openrouter"),
@@ -97,7 +97,7 @@ def model_env(monkeypatch):
 def test_default_models(model_env):
     assert config.resolve_model_name("openai") == "gpt-6-luna"
     assert config.resolve_model_name("cerebras") == "qwen-3.8-27b"
-    assert config.resolve_model_name("openrouter") == "nvidia/nemotron-3.5-super-vl"
+    assert config.resolve_model_name("openrouter") == "particle-ai/particle-1"
 
 
 def test_llm_model_name_overrides_the_default(model_env):
@@ -154,3 +154,18 @@ def test_an_empty_override_falls_back_to_the_default_not_to_no_restriction(monke
     monkeypatch.setenv("OPENROUTER_ALLOWED_PROVIDERS", "  ")
 
     assert config._get_list("OPENROUTER_ALLOWED_PROVIDERS", ("together",)) == ("together",)
+
+
+def test_the_app_defaults_to_particle_1_on_openrouter(monkeypatch):
+    """Pin the default, so a swap can't pass a green suite while being wrong."""
+    monkeypatch.delenv("LLM_MODEL_NAME", raising=False)
+
+    provider = config.resolve_provider(None)
+
+    assert provider == "openrouter"
+    assert config.resolve_model_name(provider) == "particle-ai/particle-1"
+
+
+def test_the_default_models_backend_is_on_the_openrouter_allowlist():
+    """particle-1 is served by one backend, so it must be allowed or the app can't run."""
+    assert "particle-ai" in config._DEFAULT_OPENROUTER_ALLOWED_PROVIDERS

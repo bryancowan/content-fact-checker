@@ -2,9 +2,9 @@
 
 Extracts claims from any text, URL, or image, retrieves real-world evidence using web search, and evaluates each claim as **True**, **False**, or **Uncertain**.
 
-Powered by OpenAI's [gpt-6-luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Parallel Search](https://parallel.ai/). [Cerebras](https://cerebras.ai/) (`qwen-3.8-27b`) is supported as an alternate provider; see [Changing the Provider or Model](#changing-the-provider-or-model).
+Powered by [Particle-1](https://openrouter.ai/particle-ai/particle-1) through [OpenRouter](https://openrouter.ai/), and [Parallel Search](https://parallel.ai/). OpenAI's [gpt-6-luna](https://developers.openai.com/api/docs/models/gpt-6-luna) and [Cerebras](https://cerebras.ai/) (`qwen-3.8-27b`) are supported as alternate providers; see [Changing the Provider or Model](#changing-the-provider-or-model). OpenRouter requests are limited to US- and Europe-based backends.
 
-Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use gpt-6-luna (or qwen-3.8-27b on Cerebras) instead of gpt-oss-120B.
+Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cookbook.openai.com/articles/gpt-oss/build-your-own-fact-checker-cerebras), adapted to use particle-1 (or gpt-6-luna, or qwen-3.8-27b on Cerebras) instead of gpt-oss-120B.
 
 ## How It Works
 
@@ -39,7 +39,7 @@ Based on the [OpenAI Cookbook: Build Your Own Content Fact-Checker](https://cook
 ### Prerequisites
 
 - Python 3.13 or 3.14 (CI tests both and production runs 3.14; 3.10+ should also work)
-- An [OpenAI API key](https://platform.openai.com/api-keys), or a [Cerebras API key](https://cloud.cerebras.ai/) (free tier available) if you set `LLM_PROVIDER=cerebras`
+- An [OpenRouter API key](https://openrouter.ai/keys), or an [OpenAI API key](https://platform.openai.com/api-keys) if you set `LLM_PROVIDER=openai`, or a [Cerebras API key](https://cloud.cerebras.ai/) (free tier available) if you set `LLM_PROVIDER=cerebras`
 - A [Parallel API key](https://platform.parallel.ai/) (free tier available)
 
 ### Installation
@@ -61,11 +61,11 @@ cp .env.example .env
 Edit `.env` and add your keys:
 
 ```
-OPENAI_API_KEY=your_openai_key_here
+OPENROUTER_API_KEY=your_openrouter_key_here
 PARALLEL_API_KEY=your_parallel_key_here
 ```
 
-To use Cerebras instead, set `LLM_PROVIDER=cerebras` and provide `CEREBRAS_API_KEY`.
+To use OpenAI instead, set `LLM_PROVIDER=openai` and provide `OPENAI_API_KEY`. For Cerebras, set `LLM_PROVIDER=cerebras` and provide `CEREBRAS_API_KEY`.
 
 ## Usage
 
@@ -154,8 +154,8 @@ Set these in your environment, Streamlit secrets, or the Render dashboard, then 
 
 | Setting | Default | Notes |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` | `openai`, `cerebras` or `openrouter` |
-| `LLM_MODEL_NAME` | `gpt-6-luna` (openai), `qwen-3.8-27b` (cerebras), `nvidia/nemotron-3.5-super-vl` (openrouter) | Overrides the per-provider default. On OpenRouter use its `provider/model` slugs |
+| `LLM_PROVIDER` | `openrouter` | `openrouter`, `openai` or `cerebras` |
+| `LLM_MODEL_NAME` | `particle-ai/particle-1` (openrouter), `gpt-6-luna` (openai), `qwen-3.8-27b` (cerebras) | Overrides the per-provider default. On OpenRouter use its `provider/model` slugs |
 | `OPENAI_REASONING_EFFORT` | `high` | `none`, `low`, `medium`, `high`, `xhigh`, `max` |
 | `CEREBRAS_REASONING_EFFORT` | `high` | |
 | `OPENROUTER_REASONING_EFFORT` | `high` | Sent as OpenRouter's `reasoning.effort`; models without reasoning support may ignore it |
